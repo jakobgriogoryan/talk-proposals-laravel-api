@@ -80,13 +80,15 @@ class ProposalController extends Controller
             'status' => 'pending',
         ]);
 
-        // Handle tags (create if not exists, then attach)
-        $tagIds = [];
-        foreach ($request->tags as $tagName) {
-            $tag = Tag::firstOrCreate(['name' => $tagName]);
-            $tagIds[] = $tag->id;
+        // Handle tags (create if not exists, then attach) - tags are optional
+        if ($request->has('tags') && is_array($request->tags) && count($request->tags) > 0) {
+            $tagIds = [];
+            foreach ($request->tags as $tagName) {
+                $tag = Tag::firstOrCreate(['name' => $tagName]);
+                $tagIds[] = $tag->id;
+            }
+            $proposal->tags()->sync($tagIds);
         }
-        $proposal->tags()->sync($tagIds);
 
         $proposal->load(['user', 'tags']);
 
@@ -144,14 +146,19 @@ class ProposalController extends Controller
 
         $proposal->update($data);
 
-        // Handle tags update
+        // Handle tags update - tags are optional
         if ($request->has('tags')) {
-            $tagIds = [];
-            foreach ($request->tags as $tagName) {
-                $tag = Tag::firstOrCreate(['name' => $tagName]);
-                $tagIds[] = $tag->id;
+            if (is_array($request->tags) && count($request->tags) > 0) {
+                $tagIds = [];
+                foreach ($request->tags as $tagName) {
+                    $tag = Tag::firstOrCreate(['name' => $tagName]);
+                    $tagIds[] = $tag->id;
+                }
+                $proposal->tags()->sync($tagIds);
+            } else {
+                // If tags array is empty, remove all tags
+                $proposal->tags()->sync([]);
             }
-            $proposal->tags()->sync($tagIds);
         }
 
         $proposal->load(['user', 'tags']);

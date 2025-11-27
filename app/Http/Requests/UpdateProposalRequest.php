@@ -24,8 +24,8 @@ class UpdateProposalRequest extends FormRequest
         return [
             'title' => ['sometimes', 'required', 'string', 'max:255'],
             'description' => ['sometimes', 'required', 'string'],
-            'file' => ['sometimes', 'file', 'mimes:pdf', 'max:10240'],
-            'tags' => ['sometimes', 'required', 'array', 'min:1'],
+            'file' => ['sometimes', 'nullable', 'file', 'mimes:pdf', 'max:4096'], // 4MB max, optional
+            'tags' => ['sometimes', 'nullable', 'array'], // Tags are optional
             'tags.*' => ['required', 'string', 'max:255'],
         ];
     }

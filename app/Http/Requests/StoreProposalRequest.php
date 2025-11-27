@@ -25,8 +25,8 @@ class StoreProposalRequest extends FormRequest
         return [
             'title' => ['required', 'string', 'max:255'],
             'description' => ['required', 'string'],
-            'file' => ['required', 'file', 'mimes:pdf', 'max:10240'],
-            'tags' => ['required', 'array', 'min:1'],
+            'file' => ['nullable', 'file', 'mimes:pdf', 'max:4096'], // 4MB max, optional
+            'tags' => ['nullable', 'array'], // Tags are optional
             'tags.*' => ['required', 'string', 'max:255'],
         ];
     }
