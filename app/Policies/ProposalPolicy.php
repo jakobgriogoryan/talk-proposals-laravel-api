@@ -1,10 +1,15 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Policies;
 
 use App\Models\Proposal;
 use App\Models\User;
 
+/**
+ * Proposal policy.
+ */
 class ProposalPolicy
 {
     /**
@@ -20,6 +25,11 @@ class ProposalPolicy
      */
     public function view(User $user, Proposal $proposal): bool
     {
+        // Speakers can only view their own proposals (unless admin)
+        if ($user->isSpeaker() && ! $user->isAdmin()) {
+            return $user->id === $proposal->user_id;
+        }
+
         return true;
     }
 
@@ -54,5 +64,18 @@ class ProposalPolicy
     {
         return $user->isAdmin();
     }
-}
 
+    /**
+     * Determine if the user can download the proposal file.
+     */
+    public function downloadFile(User $user, Proposal $proposal): bool
+    {
+        // Speakers can only download their own proposals (unless admin)
+        if ($user->isSpeaker() && ! $user->isAdmin()) {
+            return $user->id === $proposal->user_id;
+        }
+
+        // Reviewers and admins can download any proposal
+        return $user->isReviewer() || $user->isAdmin();
+    }
+}

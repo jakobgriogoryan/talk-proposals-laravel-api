@@ -1,13 +1,21 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
 use App\Helpers\ApiResponse;
+use App\Http\Requests\StoreTagRequest;
 use App\Http\Resources\TagResource;
 use App\Models\Tag;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
+/**
+ * Controller for managing tags.
+ */
 class TagController extends Controller
 {
     /**
@@ -15,38 +23,57 @@ class TagController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Tag::query();
+        try {
+            $query = Tag::query();
 
-        if ($request->has('search')) {
-            $query->where('name', 'like', '%'.$request->search.'%');
+            if ($request->filled('search')) {
+                $query->searchByName($request->string('search')->toString());
+            }
+
+            $tags = $query->orderBy('name')->get();
+
+            return ApiResponse::success(
+                'Tags retrieved successfully',
+                ['tags' => TagResource::collection($tags)]
+            );
+        } catch (\Exception $e) {
+            Log::error('Error retrieving tags', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return ApiResponse::error('Failed to retrieve tags', 500);
         }
-
-        $tags = $query->orderBy('name')->get();
-
-        return ApiResponse::success(
-            'Tags retrieved successfully',
-            ['tags' => TagResource::collection($tags)]
-        );
     }
 
     /**
      * Store a newly created tag or return existing one.
      */
-    public function store(Request $request): JsonResponse
+    public function store(StoreTagRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-        ]);
+        try {
+            DB::beginTransaction();
 
-        $tag = Tag::firstOrCreate([
-            'name' => $validated['name'],
-        ]);
+            $tag = Tag::firstOrCreate([
+                'name' => $request->string('name')->toString(),
+            ]);
 
-        return ApiResponse::success(
-            'Tag created successfully',
-            ['tag' => new TagResource($tag)],
-            201
-        );
+            DB::commit();
+
+            return ApiResponse::success(
+                'Tag created successfully',
+                ['tag' => new TagResource($tag)],
+                201
+            );
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            Log::error('Error creating tag', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return ApiResponse::error('Failed to create tag', 500);
+        }
     }
 }
-

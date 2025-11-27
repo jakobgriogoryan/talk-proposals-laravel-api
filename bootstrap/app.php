@@ -15,12 +15,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // statefulApi() applies EnsureFrontendRequestsAreStateful which enables sessions
         // for requests from stateful domains, but StartSession must run first
         $middleware->statefulApi();
-        
+
         // Add StartSession middleware to API routes so sessions can be used
         $middleware->api(prepend: [
             \Illuminate\Session\Middleware\StartSession::class,
         ]);
-        
+
         $middleware->validateCsrfTokens(except: [
             // Sanctum handles CSRF for SPA automatically
         ]);

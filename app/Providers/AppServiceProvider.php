@@ -1,12 +1,18 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Providers;
 
 use App\Models\Proposal;
+use App\Models\Review;
 use App\Policies\ProposalPolicy;
+use App\Policies\ReviewPolicy;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
-use Illuminate\Support\Facades\Gate;
 
+/**
+ * Application service provider.
+ */
 class AppServiceProvider extends ServiceProvider
 {
     /**
@@ -16,6 +22,7 @@ class AppServiceProvider extends ServiceProvider
      */
     protected $policies = [
         Proposal::class => ProposalPolicy::class,
+        Review::class => ReviewPolicy::class,
     ];
 
     /**

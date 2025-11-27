@@ -10,10 +10,7 @@ class ApiResponse
     /**
      * Return a successful JSON response.
      *
-     * @param string $message
-     * @param mixed $data
-     * @param int $statusCode
-     * @return JsonResponse
+     * @param  mixed  $data
      */
     public static function success(string $message, $data = null, int $statusCode = 200): JsonResponse
     {
@@ -32,10 +29,7 @@ class ApiResponse
     /**
      * Return an error JSON response.
      *
-     * @param string $message
-     * @param int $statusCode
-     * @param mixed $errors
-     * @return JsonResponse
+     * @param  mixed  $errors
      */
     public static function error(string $message, int $statusCode = 400, $errors = null): JsonResponse
     {
@@ -54,9 +48,7 @@ class ApiResponse
     /**
      * Return a validation error JSON response.
      *
-     * @param \Illuminate\Contracts\Validation\Validator|array $errors
-     * @param string $message
-     * @return JsonResponse
+     * @param  \Illuminate\Contracts\Validation\Validator|array  $errors
      */
     public static function validationError($errors, string $message = 'Validation failed'): JsonResponse
     {
@@ -71,4 +63,3 @@ class ApiResponse
         ], 422);
     }
 }
-

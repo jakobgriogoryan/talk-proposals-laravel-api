@@ -1,13 +1,30 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Enums\UserRole;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
+/**
+ * User model.
+ *
+ * @property int $id
+ * @property string $name
+ * @property string $email
+ * @property string $password
+ * @property UserRole|string $role
+ * @property \Illuminate\Support\Carbon|null $email_verified_at
+ * @property string|null $remember_token
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, Proposal> $proposals
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, Review> $reviews
+ */
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
@@ -16,7 +33,7 @@ class User extends Authenticatable
     /**
      * The attributes that are mass assignable.
      *
-     * @var list<string>
+     * @var array<int, string>
      */
     protected $fillable = [
         'name',
@@ -28,7 +45,7 @@ class User extends Authenticatable
     /**
      * The attributes that should be hidden for serialization.
      *
-     * @var list<string>
+     * @var array<int, string>
      */
     protected $hidden = [
         'password',
@@ -45,11 +62,14 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'role' => UserRole::class,
         ];
     }
 
     /**
      * Get the proposals for the user.
+     *
+     * @return HasMany<Proposal>
      */
     public function proposals(): HasMany
     {
@@ -58,6 +78,8 @@ class User extends Authenticatable
 
     /**
      * Get the reviews made by the user.
+     *
+     * @return HasMany<Review>
      */
     public function reviews(): HasMany
     {
@@ -69,7 +91,9 @@ class User extends Authenticatable
      */
     public function isAdmin(): bool
     {
-        return $this->role === 'admin';
+        $role = $this->role instanceof UserRole ? $this->role : UserRole::from($this->role);
+
+        return $role === UserRole::ADMIN;
     }
 
     /**
@@ -77,7 +101,9 @@ class User extends Authenticatable
      */
     public function isReviewer(): bool
     {
-        return $this->role === 'reviewer' || $this->isAdmin();
+        $role = $this->role instanceof UserRole ? $this->role : UserRole::from($this->role);
+
+        return $role === UserRole::REVIEWER || $this->isAdmin();
     }
 
     /**
@@ -85,6 +111,16 @@ class User extends Authenticatable
      */
     public function isSpeaker(): bool
     {
-        return $this->role === 'speaker' || $this->isAdmin();
+        $role = $this->role instanceof UserRole ? $this->role : UserRole::from($this->role);
+
+        return $role === UserRole::SPEAKER || $this->isAdmin();
+    }
+
+    /**
+     * Get the user's role as an enum.
+     */
+    public function getRoleEnum(): UserRole
+    {
+        return $this->role instanceof UserRole ? $this->role : UserRole::from($this->role);
     }
 }

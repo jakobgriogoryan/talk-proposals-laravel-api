@@ -1,7 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
+use App\Enums\UserRole;
 use App\Helpers\ApiResponse;
 use App\Http\Requests\LoginRequest;
 use App\Http\Requests\RegisterRequest;
@@ -10,9 +13,13 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Facades\Log;
 
+/**
+ * Controller for authentication.
+ */
 class AuthController extends Controller
 {
     /**
@@ -20,21 +27,38 @@ class AuthController extends Controller
      */
     public function register(RegisterRequest $request): JsonResponse
     {
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-            'role' => $request->role,
-        ]);
+        try {
+            DB::beginTransaction();
 
-        // Login the user for SPA authentication
-        Auth::guard('web')->login($user);
+            $role = UserRole::from($request->string('role')->toString());
 
-        return ApiResponse::success(
-            'Registration successful',
-            ['user' => new UserResource($user)],
-            201
-        );
+            $user = User::create([
+                'name' => $request->string('name')->toString(),
+                'email' => $request->string('email')->toString(),
+                'password' => Hash::make($request->string('password')->toString()),
+                'role' => $role->value,
+            ]);
+
+            // Login the user for SPA authentication
+            Auth::guard('web')->login($user);
+
+            DB::commit();
+
+            return ApiResponse::success(
+                'Registration successful',
+                ['user' => new UserResource($user)],
+                201
+            );
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            Log::error('Error registering user', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return ApiResponse::error('Failed to register user', 500);
+        }
     }
 
     /**
@@ -42,24 +66,37 @@ class AuthController extends Controller
      */
     public function login(LoginRequest $request): JsonResponse
     {
-        if (! Auth::guard('web')->attempt($request->only('email', 'password'), $request->boolean('remember'))) {
-            return ApiResponse::error('Invalid credentials', 401);
+        try {
+            if (! Auth::guard('web')->attempt($request->only('email', 'password'), $request->boolean('remember'))) {
+                return ApiResponse::error('Invalid credentials', 401);
+            }
+
+            // Regenerate session if available
+            // The EnsureFrontendRequestsAreStateful middleware should have initialized it
+            if ($request->hasSession()) {
+                $request->session()->regenerate();
+            } elseif (session()->isStarted()) {
+                session()->regenerate();
+            }
+
+            $user = Auth::guard('web')->user();
+
+            if (! $user) {
+                return ApiResponse::error('Authentication failed', 401);
+            }
+
+            return ApiResponse::success(
+                'Login successful',
+                ['user' => new UserResource($user)]
+            );
+        } catch (\Exception $e) {
+            Log::error('Error logging in user', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return ApiResponse::error('Failed to login', 500);
         }
-
-        // Regenerate session if available
-        // The EnsureFrontendRequestsAreStateful middleware should have initialized it
-        if ($request->hasSession()) {
-            $request->session()->regenerate();
-        } elseif (session()->isStarted()) {
-            session()->regenerate();
-        }
-
-        $user = Auth::guard('web')->user();
-
-        return ApiResponse::success(
-            'Login successful',
-            ['user' => new UserResource($user)]
-        );
     }
 
     /**
@@ -67,10 +104,25 @@ class AuthController extends Controller
      */
     public function user(Request $request): JsonResponse
     {
-        return ApiResponse::success(
-            'User retrieved successfully',
-            ['user' => new UserResource($request->user())]
-        );
+        try {
+            $user = $request->user();
+
+            if (! $user) {
+                return ApiResponse::error('Unauthenticated', 401);
+            }
+
+            return ApiResponse::success(
+                'User retrieved successfully',
+                ['user' => new UserResource($user)]
+            );
+        } catch (\Exception $e) {
+            Log::error('Error retrieving user', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return ApiResponse::error('Failed to retrieve user', 500);
+        }
     }
 
     /**
@@ -78,18 +130,26 @@ class AuthController extends Controller
      */
     public function logout(Request $request): JsonResponse
     {
-        Auth::guard('web')->logout();
-        
-        // Invalidate session if available
-        if ($request->hasSession()) {
-            $request->session()->invalidate();
-            $request->session()->regenerateToken();
-        } elseif (session()->isStarted()) {
-            session()->invalidate();
-            session()->regenerateToken();
-        }
+        try {
+            Auth::guard('web')->logout();
 
-        return ApiResponse::success('Logout successful');
+            // Invalidate session if available
+            if ($request->hasSession()) {
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+            } elseif (session()->isStarted()) {
+                session()->invalidate();
+                session()->regenerateToken();
+            }
+
+            return ApiResponse::success('Logout successful');
+        } catch (\Exception $e) {
+            Log::error('Error logging out user', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return ApiResponse::error('Failed to logout', 500);
+        }
     }
 }
-

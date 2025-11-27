@@ -1,13 +1,19 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Seeders;
 
+use App\Enums\UserRole;
 use App\Models\Proposal;
 use App\Models\Review;
 use App\Models\Tag;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 
+/**
+ * Database seeder.
+ */
 class DatabaseSeeder extends Seeder
 {
     /**
@@ -19,17 +25,17 @@ class DatabaseSeeder extends Seeder
         $admin = User::factory()->create([
             'name' => 'Admin User',
             'email' => 'admin@example.com',
-            'role' => 'admin',
+            'role' => UserRole::ADMIN->value,
         ]);
 
         // Create reviewer users
         $reviewers = User::factory()->count(3)->create([
-            'role' => 'reviewer',
+            'role' => UserRole::REVIEWER->value,
         ]);
 
         // Create speaker users
         $speakers = User::factory()->count(5)->create([
-            'role' => 'speaker',
+            'role' => UserRole::SPEAKER->value,
         ]);
 
         // Create tags
@@ -39,7 +45,7 @@ class DatabaseSeeder extends Seeder
         $proposals = Proposal::factory()
             ->count(20)
             ->create([
-                'user_id' => fn() => $speakers->random()->id,
+                'user_id' => fn () => $speakers->random()->id,
             ]);
 
         // Attach tags to proposals
