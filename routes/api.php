@@ -12,8 +12,12 @@ use Illuminate\Support\Facades\Route;
 // Public routes - login/register need sessions for Sanctum SPA
 // These routes are handled by Sanctum's EnsureFrontendRequestsAreStateful middleware
 // which enables sessions for API routes
-Route::post('/register', [AuthController::class, 'register'])->name('register');
-Route::post('/login', [AuthController::class, 'login'])->name('login');
+Route::post('/register', [AuthController::class, 'register'])
+    ->middleware('throttle:auth')
+    ->name('register');
+Route::post('/login', [AuthController::class, 'login'])
+    ->middleware('throttle:auth')
+    ->name('login');
 
 // Authenticated routes
 Route::middleware('auth:sanctum')->group(function () {
@@ -33,7 +37,15 @@ Route::middleware('auth:sanctum')->group(function () {
     // Proposals (speaker routes)
     Route::get('/proposals/top-rated', [ProposalController::class, 'topRated']);
     Route::get('/proposals/{proposal}/download', [ProposalController::class, 'downloadFile'])->name('proposals.download');
-    Route::apiResource('proposals', ProposalController::class);
+    Route::post('/proposals', [ProposalController::class, 'store'])
+        ->middleware('throttle:proposals,uploads');
+    Route::get('/proposals', [ProposalController::class, 'index']);
+    Route::get('/proposals/{proposal}', [ProposalController::class, 'show']);
+    Route::put('/proposals/{proposal}', [ProposalController::class, 'update'])
+        ->middleware('throttle:uploads');
+    Route::patch('/proposals/{proposal}', [ProposalController::class, 'update'])
+        ->middleware('throttle:uploads');
+    Route::delete('/proposals/{proposal}', [ProposalController::class, 'destroy']);
 
     // Reviews
     Route::get('/reviews/rating-options', [ReviewController::class, 'ratingOptions']);

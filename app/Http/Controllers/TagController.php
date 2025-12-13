@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Helpers\ApiResponse;
+use App\Helpers\CacheHelper;
 use App\Http\Requests\StoreTagRequest;
 use App\Http\Resources\TagResource;
 use App\Models\Tag;
@@ -91,15 +92,19 @@ class TagController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
-            $query = Tag::query();
-
-            if ($request->filled('search')) {
-                $query->searchByName($request->string('search')->toString());
-            }
-
-            // Paginate tags to handle large datasets efficiently
+            $search = $request->filled('search') ? $request->string('search')->toString() : null;
             $perPage = min((int) $request->integer('per_page', 50), 100); // Max 100 per page
-            $tags = $query->orderBy('name')->paginate($perPage);
+
+            // Use cache for tags list (1 hour TTL)
+            $tags = CacheHelper::rememberTags(function () use ($search, $perPage) {
+                $query = Tag::query();
+
+                if ($search !== null) {
+                    $query->searchByName($search);
+                }
+
+                return $query->orderBy('name')->paginate($perPage);
+            }, $search);
 
             return ApiResponse::success(
                 'Tags retrieved successfully',
@@ -174,6 +179,9 @@ class TagController extends Controller
             ]);
 
             DB::commit();
+
+            // Invalidate tags cache when a new tag is created
+            CacheHelper::forgetTags();
 
             return ApiResponse::success(
                 'Tag created successfully',

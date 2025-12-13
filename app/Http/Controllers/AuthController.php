@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\UserRole;
 use App\Helpers\ApiResponse;
+use App\Helpers\CacheHelper;
 use App\Http\Requests\LoginRequest;
 use App\Http\Requests\RegisterRequest;
 use App\Http\Resources\UserResource;
@@ -88,6 +89,9 @@ class AuthController extends Controller
             Auth::guard('web')->login($user);
 
             DB::commit();
+
+            // Cache the newly registered user
+            CacheHelper::rememberUser(fn () => $user, $user->id);
 
             return ApiResponse::success(
                 'Registration successful',
@@ -173,6 +177,9 @@ class AuthController extends Controller
                 return ApiResponse::error('Authentication failed', 401);
             }
 
+            // Cache the logged-in user
+            CacheHelper::rememberUser(fn () => $user, $user->id);
+
             return ApiResponse::success(
                 'Login successful',
                 ['user' => new UserResource($user)]
@@ -230,9 +237,14 @@ class AuthController extends Controller
                 return ApiResponse::error('Unauthenticated', 401);
             }
 
+            // Use cache for user data (5 minutes TTL)
+            $cachedUser = CacheHelper::rememberUser(function () use ($user) {
+                return $user->fresh(); // Refresh to get latest data
+            }, $user->id);
+
             return ApiResponse::success(
                 'User retrieved successfully',
-                ['user' => new UserResource($user)]
+                ['user' => new UserResource($cachedUser)]
             );
         } catch (\Exception $e) {
             Log::error('Error retrieving user', [
@@ -279,6 +291,11 @@ class AuthController extends Controller
             } elseif (session()->isStarted()) {
                 session()->invalidate();
                 session()->regenerateToken();
+            }
+
+            // Invalidate user cache on logout
+            if ($request->user()) {
+                CacheHelper::forgetUser($request->user()->id);
             }
 
             return ApiResponse::success('Logout successful');

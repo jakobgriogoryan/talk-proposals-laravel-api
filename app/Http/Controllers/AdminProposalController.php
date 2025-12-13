@@ -9,6 +9,7 @@ use App\Enums\ProposalStatus;
 use App\Events\ProposalStatusChanged;
 use App\Exceptions\UnauthorizedException;
 use App\Helpers\ApiResponse;
+use App\Helpers\CacheHelper;
 use App\Http\Requests\UpdateProposalStatusRequest;
 use App\Http\Resources\ProposalResource;
 use App\Models\Proposal;
@@ -343,6 +344,10 @@ class AdminProposalController extends Controller
             $proposal->load(['user', 'tags']);
 
             DB::commit();
+
+            // Invalidate caches related to proposals
+            CacheHelper::forgetProposalRelated($proposal->id);
+            CacheHelper::forgetUserRelated($proposal->user_id);
 
             // Broadcast proposal status changed event
             $newStatus = $status->value;

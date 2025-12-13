@@ -10,6 +10,7 @@ use App\Enums\ProposalStatus;
 use App\Events\ProposalSubmitted;
 use App\Exceptions\ProposalFileNotFoundException;
 use App\Helpers\ApiResponse;
+use App\Helpers\CacheHelper;
 use App\Http\Requests\StoreProposalRequest;
 use App\Http\Requests\UpdateProposalRequest;
 use App\Http\Resources\ProposalResource;
@@ -439,6 +440,10 @@ class ProposalController extends Controller
 
             DB::commit();
 
+            // Invalidate caches related to proposals
+            CacheHelper::forgetProposalRelated($proposal->id);
+            CacheHelper::forgetUserRelated($request->user()->id);
+
             // Broadcast proposal submitted event
             event(new ProposalSubmitted($proposal));
 
@@ -535,15 +540,15 @@ class ProposalController extends Controller
      */
     #[OA\Get(
         path: "/proposals/top-rated",
-        summary: "Get top-rated proposals",
         description: "Retrieves approved proposals with an average rating of 4.0 or higher, ordered by rating and review count. Used for displaying featured proposals in a slider.",
-        tags: ["Proposals"],
+        summary: "Get top-rated proposals",
         security: [["sanctum" => []]],
+        tags: ["Proposals"],
         parameters: [
             new OA\Parameter(
                 name: "limit",
-                in: "query",
                 description: "Maximum number of proposals to return",
+                in: "query",
                 required: false,
                 schema: new OA\Schema(type: "integer", example: 10, default: 10)
             ),
@@ -558,14 +563,14 @@ class ProposalController extends Controller
                         new OA\Property(property: "message", type: "string", example: "Top-rated proposals retrieved successfully"),
                         new OA\Property(
                             property: "data",
-                            type: "object",
                             properties: [
                                 new OA\Property(
                                     property: "proposals",
                                     type: "array",
                                     items: new OA\Items(ref: "#/components/schemas/Proposal")
                                 ),
-                            ]
+                            ],
+                            type: "object"
                         ),
                     ]
                 )
@@ -582,26 +587,29 @@ class ProposalController extends Controller
                 PaginationConstants::MAX_TOP_RATED_LIMIT
             );
 
-            $proposals = Proposal::select('proposals.*')
-                ->selectRaw('AVG(reviews.rating) as avg_rating')
-                ->selectRaw('COUNT(reviews.id) as reviews_count')
-                ->leftJoin('reviews', 'proposals.id', '=', 'reviews.proposal_id')
-                ->where('proposals.status', ProposalStatus::APPROVED->value)
-                ->groupBy('proposals.id')
-                ->havingRaw('AVG(reviews.rating) >= ?', [PaginationConstants::MIN_TOP_RATED_RATING])
-                ->havingRaw('COUNT(reviews.id) > 0')
-                ->with(['user', 'tags'])
-                ->orderByDesc('avg_rating')
-                ->orderByDesc('reviews_count')
-                ->limit($limit)
-                ->get()
-                ->map(function ($proposal) {
-                    // Set the calculated values for the resource
-                    $proposal->reviews_avg_rating = (float) $proposal->avg_rating;
-                    $proposal->reviews_count = (int) $proposal->reviews_count;
+            // Use cache for top-rated proposals (15 minutes TTL)
+            $proposals = CacheHelper::rememberTopRated(function () use ($limit) {
+                return Proposal::select('proposals.*')
+                    ->selectRaw('AVG(reviews.rating) as avg_rating')
+                    ->selectRaw('COUNT(reviews.id) as reviews_count')
+                    ->leftJoin('reviews', 'proposals.id', '=', 'reviews.proposal_id')
+                    ->where('proposals.status', ProposalStatus::APPROVED->value)
+                    ->groupBy('proposals.id')
+                    ->havingRaw('AVG(reviews.rating) >= ?', [PaginationConstants::MIN_TOP_RATED_RATING])
+                    ->havingRaw('COUNT(reviews.id) > 0')
+                    ->with(['user', 'tags'])
+                    ->orderByDesc('avg_rating')
+                    ->orderByDesc('reviews_count')
+                    ->limit($limit)
+                    ->get()
+                    ->map(function ($proposal) {
+                        // Set the calculated values for the resource
+                        $proposal->reviews_avg_rating = (float) $proposal->avg_rating;
+                        $proposal->reviews_count = (int) $proposal->reviews_count;
 
-                    return $proposal;
-                });
+                        return $proposal;
+                    });
+            }, $limit);
 
             return ApiResponse::success(
                 'Top-rated proposals retrieved successfully',
@@ -787,6 +795,14 @@ class ProposalController extends Controller
 
             DB::commit();
 
+            // Invalidate caches related to proposals
+            CacheHelper::forgetProposalRelated($proposal->id);
+            CacheHelper::forgetUserRelated($proposal->user_id);
+            // Invalidate tags cache if tags were updated
+            if ($request->has('tags')) {
+                CacheHelper::forgetTags();
+            }
+
             return ApiResponse::success(
                 'Proposal updated successfully',
                 ['proposal' => new ProposalResource($proposal)]
@@ -854,6 +870,10 @@ class ProposalController extends Controller
             $proposal->delete();
 
             DB::commit();
+
+            // Invalidate caches related to proposals
+            CacheHelper::forgetProposalRelated($proposal->id);
+            CacheHelper::forgetUserRelated($proposal->user_id);
 
             return ApiResponse::success('Proposal deleted successfully');
         } catch (AuthorizationException $e) {

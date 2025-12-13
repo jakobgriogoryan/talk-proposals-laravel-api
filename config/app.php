@@ -99,6 +99,31 @@ return [
 
     'key' => env('APP_KEY'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Rate Limiting Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Configure rate limits for various endpoints. All values are configurable
+    | via environment variables for flexibility across environments.
+    |
+    */
+
+    'rate_limit' => [
+        // Authentication endpoints (login/register)
+        'auth_attempts' => (int) env('RATE_LIMIT_AUTH_ATTEMPTS', 5),
+        'auth_decay_minutes' => (int) env('RATE_LIMIT_AUTH_DECAY_MINUTES', 1),
+
+        // Proposal creation
+        'proposals_per_hour' => (int) env('RATE_LIMIT_PROPOSALS_PER_HOUR', 10),
+        'proposals_decay_minutes' => (int) env('RATE_LIMIT_PROPOSALS_DECAY_MINUTES', 60),
+
+        // File uploads
+        'uploads_per_hour_user' => (int) env('RATE_LIMIT_UPLOADS_PER_HOUR_USER', 20),
+        'uploads_per_hour_ip' => (int) env('RATE_LIMIT_UPLOADS_PER_HOUR_IP', 5),
+        'uploads_decay_minutes' => (int) env('RATE_LIMIT_UPLOADS_DECAY_MINUTES', 60),
+    ],
+
     'previous_keys' => [
         ...array_filter(
             explode(',', (string) env('APP_PREVIOUS_KEYS', ''))

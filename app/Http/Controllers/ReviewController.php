@@ -8,6 +8,7 @@ use App\Enums\ReviewRating;
 use App\Events\ProposalReviewed;
 use App\Exceptions\DuplicateReviewException;
 use App\Helpers\ApiResponse;
+use App\Helpers\CacheHelper;
 use App\Http\Requests\StoreReviewRequest;
 use App\Http\Requests\UpdateReviewRequest;
 use App\Http\Resources\ReviewResource;
@@ -252,6 +253,10 @@ class ReviewController extends Controller
 
             DB::commit();
 
+            // Invalidate caches related to proposals (reviews affect top-rated)
+            CacheHelper::forgetProposalRelated($proposal->id);
+            CacheHelper::forgetTopRated(10); // Invalidate top-rated cache
+
             // Broadcast proposal reviewed event
             event(new ProposalReviewed($proposal, $review));
 
@@ -361,8 +366,8 @@ class ReviewController extends Controller
             content: new OA\JsonContent(
                 required: ["rating"],
                 properties: [
-                    new OA\Property(property: "rating", type: "integer", enum: [1, 2, 3, 4, 5, 10], example: 5, description: "Rating value (1-5 or 10)"),
-                    new OA\Property(property: "comment", type: "string", nullable: true, example: "Updated comment", description: "Optional review comment"),
+                    new OA\Property(property: "rating", description: "Rating value (1-5 or 10)", type: "integer", enum: [1, 2, 3, 4, 5, 10], example: 5),
+                    new OA\Property(property: "comment", description: "Optional review comment", type: "string", example: "Updated comment", nullable: true),
                 ]
             )
         ),
@@ -426,6 +431,10 @@ class ReviewController extends Controller
             $review->load('reviewer');
 
             DB::commit();
+
+            // Invalidate caches related to proposals (reviews affect top-rated)
+            CacheHelper::forgetProposalRelated($review->proposal_id);
+            CacheHelper::forgetTopRated(10); // Invalidate top-rated cache
 
             return ApiResponse::success(
                 'Review updated successfully',
