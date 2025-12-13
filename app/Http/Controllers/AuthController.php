@@ -29,22 +29,22 @@ class AuthController extends Controller
      */
     #[OA\Post(
         path: "/register",
-        summary: "Register a new user",
         description: "Creates a new user account with the provided information. The user will be automatically logged in after registration.",
-        tags: ["Authentication"],
+        summary: "Register a new user",
         requestBody: new OA\RequestBody(
             required: true,
             content: new OA\JsonContent(
                 required: ["name", "email", "password", "password_confirmation", "role"],
                 properties: [
-                    new OA\Property(property: "name", type: "string", example: "John Doe", description: "User's full name"),
-                    new OA\Property(property: "email", type: "string", format: "email", example: "john@example.com", description: "User's email address"),
-                    new OA\Property(property: "password", type: "string", format: "password", example: "password123", description: "User's password"),
-                    new OA\Property(property: "password_confirmation", type: "string", format: "password", example: "password123", description: "Password confirmation"),
-                    new OA\Property(property: "role", type: "string", enum: ["speaker", "reviewer"], example: "speaker", description: "User role (speaker or reviewer)"),
+                    new OA\Property(property: "name", description: "User's full name", type: "string", example: "John Doe"),
+                    new OA\Property(property: "email", description: "User's email address", type: "string", format: "email", example: "john@example.com"),
+                    new OA\Property(property: "password", description: "User's password", type: "string", format: "password", example: "password123"),
+                    new OA\Property(property: "password_confirmation", description: "Password confirmation", type: "string", format: "password", example: "password123"),
+                    new OA\Property(property: "role", description: "User role (speaker or reviewer)", type: "string", enum: ["speaker", "reviewer"], example: "speaker"),
                 ]
             )
         ),
+        tags: ["Authentication"],
         responses: [
             new OA\Response(
                 response: 201,
@@ -55,13 +55,13 @@ class AuthController extends Controller
                         new OA\Property(property: "message", type: "string", example: "Registration successful"),
                         new OA\Property(
                             property: "data",
-                            type: "object",
                             properties: [
                                 new OA\Property(
                                     property: "user",
                                     ref: "#/components/schemas/User"
                                 ),
-                            ]
+                            ],
+                            type: "object"
                         ),
                     ]
                 )
@@ -111,9 +111,8 @@ class AuthController extends Controller
      */
     #[OA\Post(
         path: "/login",
-        summary: "Login user",
         description: "Authenticates a user with email and password. Uses Laravel Sanctum for SPA authentication with session cookies.",
-        tags: ["Authentication"],
+        summary: "Login user",
         requestBody: new OA\RequestBody(
             required: true,
             content: new OA\JsonContent(
@@ -121,10 +120,11 @@ class AuthController extends Controller
                 properties: [
                     new OA\Property(property: "email", type: "string", format: "email", example: "john@example.com"),
                     new OA\Property(property: "password", type: "string", format: "password", example: "password123"),
-                    new OA\Property(property: "remember", type: "boolean", example: false, description: "Remember user session"),
+                    new OA\Property(property: "remember", description: "Remember user session", type: "boolean", example: false),
                 ]
             )
         ),
+        tags: ["Authentication"],
         responses: [
             new OA\Response(
                 response: 200,
@@ -135,13 +135,13 @@ class AuthController extends Controller
                         new OA\Property(property: "message", type: "string", example: "Login successful"),
                         new OA\Property(
                             property: "data",
-                            type: "object",
                             properties: [
                                 new OA\Property(
                                     property: "user",
                                     ref: "#/components/schemas/User"
                                 ),
-                            ]
+                            ],
+                            type: "object"
                         ),
                     ]
                 )
@@ -153,7 +153,9 @@ class AuthController extends Controller
     public function login(LoginRequest $request): JsonResponse
     {
         try {
-            if (! Auth::guard('web')->attempt($request->only('email', 'password'), $request->boolean('remember'))) {
+            if (! Auth::guard('web')
+                ->attempt($request->only('email', 'password'), $request->boolean('remember'))
+            ) {
                 return ApiResponse::error('Invalid credentials', 401);
             }
 
@@ -190,10 +192,10 @@ class AuthController extends Controller
      */
     #[OA\Get(
         path: "/user",
-        summary: "Get authenticated user",
         description: "Returns the currently authenticated user's information.",
-        tags: ["Authentication"],
+        summary: "Get authenticated user",
         security: [["sanctum" => []]],
+        tags: ["Authentication"],
         responses: [
             new OA\Response(
                 response: 200,
@@ -204,13 +206,13 @@ class AuthController extends Controller
                         new OA\Property(property: "message", type: "string", example: "User retrieved successfully"),
                         new OA\Property(
                             property: "data",
-                            type: "object",
                             properties: [
                                 new OA\Property(
                                     property: "user",
                                     ref: "#/components/schemas/User"
                                 ),
-                            ]
+                            ],
+                            type: "object"
                         ),
                     ]
                 )
@@ -247,10 +249,10 @@ class AuthController extends Controller
      */
     #[OA\Post(
         path: "/logout",
-        summary: "Logout user",
         description: "Logs out the currently authenticated user and invalidates the session.",
-        tags: ["Authentication"],
+        summary: "Logout user",
         security: [["sanctum" => []]],
+        tags: ["Authentication"],
         responses: [
             new OA\Response(
                 response: 200,

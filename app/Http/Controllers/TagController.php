@@ -25,17 +25,31 @@ class TagController extends Controller
      */
     #[OA\Get(
         path: "/tags",
-        summary: "List all tags",
         description: "Retrieves all available tags. Supports optional search by name.",
-        tags: ["Tags"],
+        summary: "List all tags",
         security: [["sanctum" => []]],
+        tags: ["Tags"],
         parameters: [
             new OA\Parameter(
                 name: "search",
-                in: "query",
                 description: "Search tags by name",
+                in: "query",
                 required: false,
                 schema: new OA\Schema(type: "string", example: "Technology")
+            ),
+            new OA\Parameter(
+                name: "page",
+                description: "Page number",
+                in: "query",
+                required: false,
+                schema: new OA\Schema(type: "integer", example: 1)
+            ),
+            new OA\Parameter(
+                name: "per_page",
+                description: "Items per page (max 100)",
+                in: "query",
+                required: false,
+                schema: new OA\Schema(type: "integer", example: 50)
             ),
         ],
         responses: [
@@ -48,14 +62,24 @@ class TagController extends Controller
                         new OA\Property(property: "message", type: "string", example: "Tags retrieved successfully"),
                         new OA\Property(
                             property: "data",
-                            type: "object",
                             properties: [
                                 new OA\Property(
                                     property: "tags",
                                     type: "array",
                                     items: new OA\Items(ref: "#/components/schemas/Tag")
                                 ),
-                            ]
+                                new OA\Property(
+                                    property: "pagination",
+                                    properties: [
+                                        new OA\Property(property: "current_page", type: "integer", example: 1),
+                                        new OA\Property(property: "last_page", type: "integer", example: 2),
+                                        new OA\Property(property: "per_page", type: "integer", example: 50),
+                                        new OA\Property(property: "total", type: "integer", example: 75),
+                                    ],
+                                    type: "object"
+                                ),
+                            ],
+                            type: "object"
                         ),
                     ]
                 )
@@ -73,11 +97,21 @@ class TagController extends Controller
                 $query->searchByName($request->string('search')->toString());
             }
 
-            $tags = $query->orderBy('name')->get();
+            // Paginate tags to handle large datasets efficiently
+            $perPage = min((int) $request->integer('per_page', 50), 100); // Max 100 per page
+            $tags = $query->orderBy('name')->paginate($perPage);
 
             return ApiResponse::success(
                 'Tags retrieved successfully',
-                ['tags' => TagResource::collection($tags)]
+                [
+                    'tags' => TagResource::collection($tags->items()),
+                    'pagination' => [
+                        'current_page' => $tags->currentPage(),
+                        'last_page' => $tags->lastPage(),
+                        'per_page' => $tags->perPage(),
+                        'total' => $tags->total(),
+                    ],
+                ]
             );
         } catch (\Exception $e) {
             Log::error('Error retrieving tags', [
@@ -94,19 +128,19 @@ class TagController extends Controller
      */
     #[OA\Post(
         path: "/tags",
-        summary: "Create a new tag",
         description: "Creates a new tag or returns the existing tag if a tag with the same name already exists.",
-        tags: ["Tags"],
+        summary: "Create a new tag",
         security: [["sanctum" => []]],
         requestBody: new OA\RequestBody(
             required: true,
             content: new OA\JsonContent(
                 required: ["name"],
                 properties: [
-                    new OA\Property(property: "name", type: "string", example: "Technology", description: "Tag name"),
+                    new OA\Property(property: "name", description: "Tag name", type: "string", example: "Technology"),
                 ]
             )
         ),
+        tags: ["Tags"],
         responses: [
             new OA\Response(
                 response: 201,
@@ -117,10 +151,10 @@ class TagController extends Controller
                         new OA\Property(property: "message", type: "string", example: "Tag created successfully"),
                         new OA\Property(
                             property: "data",
-                            type: "object",
                             properties: [
                                 new OA\Property(property: "tag", ref: "#/components/schemas/Tag"),
-                            ]
+                            ],
+                            type: "object"
                         ),
                     ]
                 )

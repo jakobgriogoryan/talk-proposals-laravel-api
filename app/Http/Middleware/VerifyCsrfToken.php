@@ -22,7 +22,7 @@ class VerifyCsrfToken extends Middleware
      * @param  \Illuminate\Http\Request  $request
      * @return bool
      */
-    protected function inExceptArray($request)
+    protected function inExceptArray($request): bool
     {
         // Exclude all API routes - Sanctum handles CSRF for stateful requests
         $path = $request->path();

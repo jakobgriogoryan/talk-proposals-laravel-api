@@ -30,10 +30,10 @@ class ReviewController extends Controller
      */
     #[OA\Get(
         path: "/reviews/rating-options",
-        summary: "Get rating options",
         description: "Returns all available rating options (1-5 and 10) with their labels.",
-        tags: ["Reviews"],
+        summary: "Get rating options",
         security: [["sanctum" => []]],
+        tags: ["Reviews"],
         responses: [
             new OA\Response(
                 response: 200,
@@ -44,20 +44,20 @@ class ReviewController extends Controller
                         new OA\Property(property: "message", type: "string", example: "Rating options retrieved successfully"),
                         new OA\Property(
                             property: "data",
-                            type: "object",
                             properties: [
                                 new OA\Property(
                                     property: "ratings",
                                     type: "array",
                                     items: new OA\Items(
-                                        type: "object",
                                         properties: [
                                             new OA\Property(property: "value", type: "integer", example: 5),
                                             new OA\Property(property: "label", type: "string", example: "5 - Excellent"),
-                                        ]
+                                        ],
+                                        type: "object"
                                     )
                                 ),
-                            ]
+                            ],
+                            type: "object"
                         ),
                     ]
                 )
@@ -79,10 +79,10 @@ class ReviewController extends Controller
      */
     #[OA\Get(
         path: "/proposals/{proposalId}/reviews",
+        description: "Retrieves paginated reviews for a specific proposal, ordered by most recent first.",
         summary: "Get reviews for a proposal",
-        description: "Retrieves all reviews for a specific proposal, ordered by most recent first.",
-        tags: ["Reviews"],
         security: [["sanctum" => []]],
+        tags: ["Reviews"],
         parameters: [
             new OA\Parameter(
                 name: "proposalId",
@@ -90,6 +90,20 @@ class ReviewController extends Controller
                 required: true,
                 description: "Proposal ID",
                 schema: new OA\Schema(type: "integer", example: 1)
+            ),
+            new OA\Parameter(
+                name: "page",
+                description: "Page number",
+                in: "query",
+                required: false,
+                schema: new OA\Schema(type: "integer", example: 1)
+            ),
+            new OA\Parameter(
+                name: "per_page",
+                description: "Items per page (max 50)",
+                in: "query",
+                required: false,
+                schema: new OA\Schema(type: "integer", example: 10)
             ),
         ],
         responses: [
@@ -102,14 +116,24 @@ class ReviewController extends Controller
                         new OA\Property(property: "message", type: "string", example: "Reviews retrieved successfully"),
                         new OA\Property(
                             property: "data",
-                            type: "object",
                             properties: [
                                 new OA\Property(
                                     property: "reviews",
                                     type: "array",
                                     items: new OA\Items(ref: "#/components/schemas/Review")
                                 ),
-                            ]
+                                new OA\Property(
+                                    property: "pagination",
+                                    properties: [
+                                        new OA\Property(property: "current_page", type: "integer", example: 1),
+                                        new OA\Property(property: "last_page", type: "integer", example: 3),
+                                        new OA\Property(property: "per_page", type: "integer", example: 10),
+                                        new OA\Property(property: "total", type: "integer", example: 25),
+                                    ],
+                                    type: "object"
+                                ),
+                            ],
+                            type: "object"
                         ),
                     ]
                 )
@@ -122,11 +146,21 @@ class ReviewController extends Controller
     public function index(Request $request, Proposal $proposal): JsonResponse
     {
         try {
-            $reviews = $proposal->reviews()->with('reviewer')->latest()->get();
+            // Paginate reviews to handle proposals with many reviews
+            $perPage = min((int) $request->integer('per_page', 10), 50); // Max 50 per page
+            $reviews = $proposal->reviews()->with('reviewer')->latest()->paginate($perPage);
 
             return ApiResponse::success(
                 'Reviews retrieved successfully',
-                ['reviews' => ReviewResource::collection($reviews)]
+                [
+                    'reviews' => ReviewResource::collection($reviews->items()),
+                    'pagination' => [
+                        'current_page' => $reviews->currentPage(),
+                        'last_page' => $reviews->lastPage(),
+                        'per_page' => $reviews->perPage(),
+                        'total' => $reviews->total(),
+                    ],
+                ]
             );
         } catch (\Exception $e) {
             Log::error('Error retrieving reviews', [
@@ -144,19 +178,9 @@ class ReviewController extends Controller
      */
     #[OA\Post(
         path: "/proposals/{proposalId}/reviews",
-        summary: "Create a review",
         description: "Creates a new review for a proposal. Each reviewer can only review a proposal once. Rating must be 1, 2, 3, 4, 5, or 10.",
-        tags: ["Reviews"],
+        summary: "Create a review",
         security: [["sanctum" => []]],
-        parameters: [
-            new OA\Parameter(
-                name: "proposalId",
-                in: "path",
-                required: true,
-                description: "Proposal ID",
-                schema: new OA\Schema(type: "integer", example: 1)
-            ),
-        ],
         requestBody: new OA\RequestBody(
             required: true,
             content: new OA\JsonContent(
@@ -167,6 +191,16 @@ class ReviewController extends Controller
                 ]
             )
         ),
+        tags: ["Reviews"],
+        parameters: [
+            new OA\Parameter(
+                name: "proposalId",
+                description: "Proposal ID",
+                in: "path",
+                required: true,
+                schema: new OA\Schema(type: "integer", example: 1)
+            ),
+        ],
         responses: [
             new OA\Response(
                 response: 201,
@@ -177,10 +211,10 @@ class ReviewController extends Controller
                         new OA\Property(property: "message", type: "string", example: "Review created successfully"),
                         new OA\Property(
                             property: "data",
-                            type: "object",
                             properties: [
                                 new OA\Property(property: "review", ref: "#/components/schemas/Review"),
-                            ]
+                            ],
+                            type: "object"
                         ),
                     ]
                 )
@@ -246,23 +280,23 @@ class ReviewController extends Controller
      */
     #[OA\Get(
         path: "/proposals/{proposalId}/reviews/{reviewId}",
-        summary: "Get a specific review",
         description: "Retrieves a single review by ID for a specific proposal.",
-        tags: ["Reviews"],
+        summary: "Get a specific review",
         security: [["sanctum" => []]],
+        tags: ["Reviews"],
         parameters: [
             new OA\Parameter(
                 name: "proposalId",
+                description: "Proposal ID",
                 in: "path",
                 required: true,
-                description: "Proposal ID",
                 schema: new OA\Schema(type: "integer", example: 1)
             ),
             new OA\Parameter(
                 name: "reviewId",
+                description: "Review ID",
                 in: "path",
                 required: true,
-                description: "Review ID",
                 schema: new OA\Schema(type: "integer", example: 1)
             ),
         ],
@@ -276,10 +310,10 @@ class ReviewController extends Controller
                         new OA\Property(property: "message", type: "string", example: "Review retrieved successfully"),
                         new OA\Property(
                             property: "data",
-                            type: "object",
                             properties: [
                                 new OA\Property(property: "review", ref: "#/components/schemas/Review"),
-                            ]
+                            ],
+                            type: "object"
                         ),
                     ]
                 )
@@ -319,26 +353,9 @@ class ReviewController extends Controller
      */
     #[OA\Put(
         path: "/proposals/{proposalId}/reviews/{reviewId}",
-        summary: "Update a review",
         description: "Updates an existing review. Only admins can update reviews. Rating must be 1, 2, 3, 4, 5, or 10.",
-        tags: ["Reviews"],
+        summary: "Update a review",
         security: [["sanctum" => []]],
-        parameters: [
-            new OA\Parameter(
-                name: "proposalId",
-                in: "path",
-                required: true,
-                description: "Proposal ID",
-                schema: new OA\Schema(type: "integer", example: 1)
-            ),
-            new OA\Parameter(
-                name: "reviewId",
-                in: "path",
-                required: true,
-                description: "Review ID",
-                schema: new OA\Schema(type: "integer", example: 1)
-            ),
-        ],
         requestBody: new OA\RequestBody(
             required: true,
             content: new OA\JsonContent(
@@ -349,6 +366,23 @@ class ReviewController extends Controller
                 ]
             )
         ),
+        tags: ["Reviews"],
+        parameters: [
+            new OA\Parameter(
+                name: "proposalId",
+                description: "Proposal ID",
+                in: "path",
+                required: true,
+                schema: new OA\Schema(type: "integer", example: 1)
+            ),
+            new OA\Parameter(
+                name: "reviewId",
+                description: "Review ID",
+                in: "path",
+                required: true,
+                schema: new OA\Schema(type: "integer", example: 1)
+            ),
+        ],
         responses: [
             new OA\Response(
                 response: 200,
@@ -359,10 +393,10 @@ class ReviewController extends Controller
                         new OA\Property(property: "message", type: "string", example: "Review updated successfully"),
                         new OA\Property(
                             property: "data",
-                            type: "object",
                             properties: [
                                 new OA\Property(property: "review", ref: "#/components/schemas/Review"),
-                            ]
+                            ],
+                            type: "object"
                         ),
                     ]
                 )

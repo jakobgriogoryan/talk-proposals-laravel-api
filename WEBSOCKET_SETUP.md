@@ -5,7 +5,7 @@ This project uses Laravel Broadcasting with Pusher for real-time WebSocket conne
 ## Prerequisites
 
 1. A Pusher account (free tier available at https://pusher.com)
-2. Laravel 11 with Broadcasting enabled
+2. Laravel 12 with Broadcasting enabled
 3. Vue.js frontend with Laravel Echo
 
 ## Backend Setup (Laravel)

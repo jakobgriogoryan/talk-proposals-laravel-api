@@ -14,6 +14,7 @@ use App\Http\Resources\ProposalResource;
 use App\Models\Proposal;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use OpenApi\Attributes as OA;
@@ -29,50 +30,50 @@ class AdminProposalController extends Controller
      */
     #[OA\Get(
         path: "/admin/proposals",
-        summary: "List all proposals (Admin only)",
         description: "Retrieves all proposals with filtering options. Only accessible by admin users. Includes additional filters like user_id.",
-        tags: ["Admin"],
+        summary: "List all proposals (Admin only)",
         security: [["sanctum" => []]],
+        tags: ["Admin"],
         parameters: [
             new OA\Parameter(
                 name: "search",
-                in: "query",
                 description: "Search proposals by title",
+                in: "query",
                 required: false,
                 schema: new OA\Schema(type: "string", example: "Laravel")
             ),
             new OA\Parameter(
                 name: "tags",
-                in: "query",
                 description: "Filter by tag IDs (comma-separated)",
+                in: "query",
                 required: false,
                 schema: new OA\Schema(type: "string", example: "1,2,3")
             ),
             new OA\Parameter(
                 name: "status",
-                in: "query",
                 description: "Filter by status",
+                in: "query",
                 required: false,
                 schema: new OA\Schema(type: "string", enum: ["pending", "approved", "rejected"], example: "pending")
             ),
             new OA\Parameter(
                 name: "user_id",
-                in: "query",
                 description: "Filter by user ID",
+                in: "query",
                 required: false,
                 schema: new OA\Schema(type: "integer", example: 1)
             ),
             new OA\Parameter(
                 name: "page",
-                in: "query",
                 description: "Page number",
+                in: "query",
                 required: false,
                 schema: new OA\Schema(type: "integer", example: 1)
             ),
             new OA\Parameter(
                 name: "per_page",
-                in: "query",
                 description: "Items per page",
+                in: "query",
                 required: false,
                 schema: new OA\Schema(type: "integer", example: 15)
             ),
@@ -87,7 +88,6 @@ class AdminProposalController extends Controller
                         new OA\Property(property: "message", type: "string", example: "Proposals retrieved successfully"),
                         new OA\Property(
                             property: "data",
-                            type: "object",
                             properties: [
                                 new OA\Property(
                                     property: "proposals",
@@ -96,15 +96,16 @@ class AdminProposalController extends Controller
                                 ),
                                 new OA\Property(
                                     property: "pagination",
-                                    type: "object",
                                     properties: [
                                         new OA\Property(property: "current_page", type: "integer", example: 1),
                                         new OA\Property(property: "last_page", type: "integer", example: 5),
                                         new OA\Property(property: "per_page", type: "integer", example: 15),
                                         new OA\Property(property: "total", type: "integer", example: 75),
-                                    ]
+                                    ],
+                                    type: "object"
                                 ),
-                            ]
+                            ],
+                            type: "object"
                         ),
                     ]
                 )
@@ -164,7 +165,7 @@ class AdminProposalController extends Controller
     /**
      * Search proposals using Laravel Scout (Algolia) for admin.
      */
-    private function searchWithScout(Request $request, string $searchQuery, int $perPage)
+    private function searchWithScout(Request $request, string $searchQuery, int $perPage): LengthAwarePaginator
     {
         // Build Algolia filters
         $filters = [];
@@ -205,7 +206,7 @@ class AdminProposalController extends Controller
 
         if (empty($proposalIds)) {
             // Return empty paginator if no results
-            return new \Illuminate\Pagination\LengthAwarePaginator(
+            return new LengthAwarePaginator(
                 collect([]),
                 0,
                 $perPage,
@@ -225,7 +226,7 @@ class AdminProposalController extends Controller
         $currentPage = $searchResults->currentPage();
         $total = $searchResults->total();
 
-        return new \Illuminate\Pagination\LengthAwarePaginator(
+        return new LengthAwarePaginator(
             $proposals,
             $total,
             $perPage,
@@ -237,7 +238,7 @@ class AdminProposalController extends Controller
     /**
      * Search proposals using database queries (fallback) for admin.
      */
-    private function searchWithDatabase(Request $request, int $perPage)
+    private function searchWithDatabase(Request $request, int $perPage): LengthAwarePaginator
     {
         $query = Proposal::with(['user', 'tags', 'reviews']);
 
@@ -276,19 +277,9 @@ class AdminProposalController extends Controller
      */
     #[OA\Patch(
         path: "/admin/proposals/{id}/status",
-        summary: "Update proposal status (Admin only)",
         description: "Updates the status of a proposal. Only accessible by admin users. Triggers real-time broadcast event.",
-        tags: ["Admin"],
+        summary: "Update proposal status (Admin only)",
         security: [["sanctum" => []]],
-        parameters: [
-            new OA\Parameter(
-                name: "id",
-                in: "path",
-                required: true,
-                description: "Proposal ID",
-                schema: new OA\Schema(type: "integer", example: 1)
-            ),
-        ],
         requestBody: new OA\RequestBody(
             required: true,
             content: new OA\JsonContent(
@@ -298,6 +289,16 @@ class AdminProposalController extends Controller
                 ]
             )
         ),
+        tags: ["Admin"],
+        parameters: [
+            new OA\Parameter(
+                name: "id",
+                description: "Proposal ID",
+                in: "path",
+                required: true,
+                schema: new OA\Schema(type: "integer", example: 1)
+            ),
+        ],
         responses: [
             new OA\Response(
                 response: 200,
@@ -308,10 +309,10 @@ class AdminProposalController extends Controller
                         new OA\Property(property: "message", type: "string", example: "Proposal status updated successfully"),
                         new OA\Property(
                             property: "data",
-                            type: "object",
                             properties: [
                                 new OA\Property(property: "proposal", ref: "#/components/schemas/Proposal"),
-                            ]
+                            ],
+                            type: "object"
                         ),
                     ]
                 )
@@ -329,9 +330,10 @@ class AdminProposalController extends Controller
             DB::beginTransaction();
 
             // Get old status as string (status is cast to ProposalStatus enum)
-            $oldStatus = $proposal->status instanceof ProposalStatus 
-                ? $proposal->status->value 
+            $oldStatus = $proposal->status instanceof ProposalStatus
+                ? $proposal->status->value
                 : (string) $proposal->status;
+
             $status = ProposalStatus::from($request->string('status')->toString());
 
             $proposal->update([
