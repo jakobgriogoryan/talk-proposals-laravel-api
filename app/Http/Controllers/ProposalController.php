@@ -15,8 +15,10 @@ use App\Http\Requests\UpdateProposalRequest;
 use App\Http\Resources\ProposalResource;
 use App\Models\Proposal;
 use App\Models\Tag;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -26,80 +28,80 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 /**
  * Controller for managing proposals.
  */
-#[OA\Tag(name: "Proposals")]
+#[OA\Tag(name: 'Proposals')]
 class ProposalController extends Controller
 {
     /**
      * Display a listing of proposals for reviewers.
      */
     #[OA\Get(
-        path: "/review/proposals",
-        summary: "List all proposals for review (Reviewer only)",
-        description: "Retrieves all proposals for reviewers to review. Only accessible by reviewer users. Supports full-text search (using Laravel Scout with Algolia) across title, description, tags, and author name. Also supports filtering by tags and status.",
-        tags: ["Reviews"],
-        security: [["sanctum" => []]],
+        path: '/review/proposals',
+        summary: 'List all proposals for review (Reviewer only)',
+        description: 'Retrieves all proposals for reviewers to review. Only accessible by reviewer users. Supports full-text search (using Laravel Scout with Algolia) across title, description, tags, and author name. Also supports filtering by tags and status.',
+        tags: ['Reviews'],
+        security: [['sanctum' => []]],
         parameters: [
             new OA\Parameter(
-                name: "search",
-                in: "query",
-                description: "Full-text search across proposal title, description, tags, and author name. Uses Laravel Scout with Algolia for advanced search capabilities when configured.",
+                name: 'search',
+                in: 'query',
+                description: 'Full-text search across proposal title, description, tags, and author name. Uses Laravel Scout with Algolia for advanced search capabilities when configured.',
                 required: false,
-                schema: new OA\Schema(type: "string", example: "Laravel framework")
+                schema: new OA\Schema(type: 'string', example: 'Laravel framework')
             ),
             new OA\Parameter(
-                name: "tags",
-                in: "query",
-                description: "Filter by tag IDs (comma-separated or array)",
+                name: 'tags',
+                in: 'query',
+                description: 'Filter by tag IDs (comma-separated or array)',
                 required: false,
-                schema: new OA\Schema(type: "string", example: "1,2,3")
+                schema: new OA\Schema(type: 'string', example: '1,2,3')
             ),
             new OA\Parameter(
-                name: "status",
-                in: "query",
-                description: "Filter by status",
+                name: 'status',
+                in: 'query',
+                description: 'Filter by status',
                 required: false,
-                schema: new OA\Schema(type: "string", enum: ["pending", "approved", "rejected"], example: "pending")
+                schema: new OA\Schema(type: 'string', enum: ['pending', 'approved', 'rejected'], example: 'pending')
             ),
             new OA\Parameter(
-                name: "page",
-                in: "query",
-                description: "Page number",
+                name: 'page',
+                in: 'query',
+                description: 'Page number',
                 required: false,
-                schema: new OA\Schema(type: "integer", example: 1)
+                schema: new OA\Schema(type: 'integer', example: 1)
             ),
             new OA\Parameter(
-                name: "per_page",
-                in: "query",
-                description: "Items per page",
+                name: 'per_page',
+                in: 'query',
+                description: 'Items per page',
                 required: false,
-                schema: new OA\Schema(type: "integer", example: 15)
+                schema: new OA\Schema(type: 'integer', example: 15)
             ),
         ],
         responses: [
             new OA\Response(
                 response: 200,
-                description: "Proposals retrieved successfully",
+                description: 'Proposals retrieved successfully',
                 content: new OA\JsonContent(
                     properties: [
-                        new OA\Property(property: "status", type: "string", example: "success"),
-                        new OA\Property(property: "message", type: "string", example: "Proposals retrieved successfully"),
+                        new OA\Property(property: 'status', type: 'string', example: 'success'),
+                        new OA\Property(property: 'message', type: 'string', example: 'Proposals retrieved successfully'),
                         new OA\Property(
-                            property: "data",
-                            type: "object",
+                            property: 'data',
+                            type: 'object',
                             properties: [
                                 new OA\Property(
-                                    property: "proposals",
-                                    type: "array",
-                                    items: new OA\Items(ref: "#/components/schemas/Proposal")
+                                    property: 'proposals',
+                                    type: 'array',
+                                    items: new OA\Items(ref: '#/components/schemas/Proposal')
                                 ),
                                 new OA\Property(
-                                    property: "pagination",
-                                    type: "object",
+                                    property: 'pagination',
+                                    type: 'object',
                                     properties: [
-                                        new OA\Property(property: "current_page", type: "integer", example: 1),
-                                        new OA\Property(property: "last_page", type: "integer", example: 5),
-                                        new OA\Property(property: "per_page", type: "integer", example: 15),
-                                        new OA\Property(property: "total", type: "integer", example: 75),
+                                        new OA\Property(property: 'current_page', type: 'integer', example: 1),
+                                        new OA\Property(property: 'last_page', type: 'integer', example: 5),
+                                        new OA\Property(property: 'per_page', type: 'integer', example: 15),
+                                        new OA\Property(property: 'total', type: 'integer', example: 75),
                                     ]
                                 ),
                             ]
@@ -107,9 +109,9 @@ class ProposalController extends Controller
                     ]
                 )
             ),
-            new OA\Response(response: 401, description: "Unauthenticated"),
-            new OA\Response(response: 403, description: "Forbidden - Reviewer only"),
-            new OA\Response(response: 500, description: "Server error"),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 403, description: 'Forbidden - Reviewer only'),
+            new OA\Response(response: 500, description: 'Server error'),
         ]
     )]
     public function indexForReview(Request $request): JsonResponse
@@ -125,73 +127,73 @@ class ProposalController extends Controller
      * Display a listing of proposals.
      */
     #[OA\Get(
-        path: "/proposals",
-        summary: "List proposals",
-        description: "Retrieves a paginated list of proposals. Speakers see only their own proposals, while reviewers and admins see all proposals. Supports full-text search (using Laravel Scout with Algolia) across title, description, tags, and author name. Also supports filtering by tags and status.",
-        tags: ["Proposals"],
-        security: [["sanctum" => []]],
+        path: '/proposals',
+        summary: 'List proposals',
+        description: 'Retrieves a paginated list of proposals. Speakers see only their own proposals, while reviewers and admins see all proposals. Supports full-text search (using Laravel Scout with Algolia) across title, description, tags, and author name. Also supports filtering by tags and status.',
+        tags: ['Proposals'],
+        security: [['sanctum' => []]],
         parameters: [
             new OA\Parameter(
-                name: "search",
-                in: "query",
-                description: "Search proposals by title",
+                name: 'search',
+                in: 'query',
+                description: 'Search proposals by title',
                 required: false,
-                schema: new OA\Schema(type: "string", example: "Laravel")
+                schema: new OA\Schema(type: 'string', example: 'Laravel')
             ),
             new OA\Parameter(
-                name: "tags",
-                in: "query",
-                description: "Filter by tag IDs (comma-separated or array)",
+                name: 'tags',
+                in: 'query',
+                description: 'Filter by tag IDs (comma-separated or array)',
                 required: false,
-                schema: new OA\Schema(type: "string", example: "1,2,3")
+                schema: new OA\Schema(type: 'string', example: '1,2,3')
             ),
             new OA\Parameter(
-                name: "status",
-                in: "query",
-                description: "Filter by status",
+                name: 'status',
+                in: 'query',
+                description: 'Filter by status',
                 required: false,
-                schema: new OA\Schema(type: "string", enum: ["pending", "approved", "rejected"], example: "pending")
+                schema: new OA\Schema(type: 'string', enum: ['pending', 'approved', 'rejected'], example: 'pending')
             ),
             new OA\Parameter(
-                name: "page",
-                in: "query",
-                description: "Page number",
+                name: 'page',
+                in: 'query',
+                description: 'Page number',
                 required: false,
-                schema: new OA\Schema(type: "integer", example: 1)
+                schema: new OA\Schema(type: 'integer', example: 1)
             ),
             new OA\Parameter(
-                name: "per_page",
-                in: "query",
-                description: "Items per page",
+                name: 'per_page',
+                in: 'query',
+                description: 'Items per page',
                 required: false,
-                schema: new OA\Schema(type: "integer", example: 15)
+                schema: new OA\Schema(type: 'integer', example: 15)
             ),
         ],
         responses: [
             new OA\Response(
                 response: 200,
-                description: "Proposals retrieved successfully",
+                description: 'Proposals retrieved successfully',
                 content: new OA\JsonContent(
                     properties: [
-                        new OA\Property(property: "status", type: "string", example: "success"),
-                        new OA\Property(property: "message", type: "string", example: "Proposals retrieved successfully"),
+                        new OA\Property(property: 'status', type: 'string', example: 'success'),
+                        new OA\Property(property: 'message', type: 'string', example: 'Proposals retrieved successfully'),
                         new OA\Property(
-                            property: "data",
-                            type: "object",
+                            property: 'data',
+                            type: 'object',
                             properties: [
                                 new OA\Property(
-                                    property: "proposals",
-                                    type: "array",
-                                    items: new OA\Items(ref: "#/components/schemas/Proposal")
+                                    property: 'proposals',
+                                    type: 'array',
+                                    items: new OA\Items(ref: '#/components/schemas/Proposal')
                                 ),
                                 new OA\Property(
-                                    property: "pagination",
-                                    type: "object",
+                                    property: 'pagination',
+                                    type: 'object',
                                     properties: [
-                                        new OA\Property(property: "current_page", type: "integer", example: 1),
-                                        new OA\Property(property: "last_page", type: "integer", example: 5),
-                                        new OA\Property(property: "per_page", type: "integer", example: 15),
-                                        new OA\Property(property: "total", type: "integer", example: 75),
+                                        new OA\Property(property: 'current_page', type: 'integer', example: 1),
+                                        new OA\Property(property: 'last_page', type: 'integer', example: 5),
+                                        new OA\Property(property: 'per_page', type: 'integer', example: 15),
+                                        new OA\Property(property: 'total', type: 'integer', example: 75),
                                     ]
                                 ),
                             ]
@@ -199,8 +201,8 @@ class ProposalController extends Controller
                     ]
                 )
             ),
-            new OA\Response(response: 401, description: "Unauthenticated"),
-            new OA\Response(response: 500, description: "Server error"),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 500, description: 'Server error'),
         ]
     )]
     public function index(Request $request): JsonResponse
@@ -214,7 +216,7 @@ class ProposalController extends Controller
             );
 
             $searchQuery = $request->filled('search') ? $request->string('search')->toString() : null;
-            $useScout = $searchQuery !== null && config('scout.driver') === 'algolia' && !empty(config('scout.algolia.id'));
+            $useScout = $searchQuery !== null && config('scout.driver') === 'algolia' && ! empty(config('scout.algolia.id'));
 
             // Use Scout for full-text search if available and search query is provided
             if ($useScout) {
@@ -290,7 +292,7 @@ class ProposalController extends Controller
 
         if (empty($proposalIds)) {
             // Return empty paginator if no results
-            return new \Illuminate\Pagination\LengthAwarePaginator(
+            return new LengthAwarePaginator(
                 collect([]),
                 0,
                 $perPage,
@@ -310,7 +312,7 @@ class ProposalController extends Controller
         $currentPage = $searchResults->currentPage();
         $total = $searchResults->total();
 
-        return new \Illuminate\Pagination\LengthAwarePaginator(
+        return new LengthAwarePaginator(
             $proposals,
             $total,
             $perPage,
@@ -360,22 +362,22 @@ class ProposalController extends Controller
      * Store a newly created proposal.
      */
     #[OA\Post(
-        path: "/proposals",
-        summary: "Create a new proposal",
+        path: '/proposals',
+        summary: 'Create a new proposal',
         description: "Creates a new talk proposal. File upload is optional (PDF, max 4MB). Tags can be provided as an array of strings (will be created if they don't exist). Status defaults to 'pending'.",
-        tags: ["Proposals"],
-        security: [["sanctum" => []]],
+        tags: ['Proposals'],
+        security: [['sanctum' => []]],
         requestBody: new OA\RequestBody(
             required: true,
             content: new OA\MediaType(
-                mediaType: "multipart/form-data",
+                mediaType: 'multipart/form-data',
                 schema: new OA\Schema(
-                    required: ["title", "description"],
+                    required: ['title', 'description'],
                     properties: [
-                        new OA\Property(property: "title", type: "string", example: "Introduction to Laravel", description: "Proposal title (required)"),
-                        new OA\Property(property: "description", type: "string", example: "A comprehensive guide to Laravel framework", description: "Proposal description (required)"),
-                        new OA\Property(property: "file", type: "string", format: "binary", description: "PDF file (optional, max 4MB)"),
-                        new OA\Property(property: "tags", type: "array", items: new OA\Items(type: "string"), example: ["Technology", "Laravel"], description: "Array of tag names (optional)"),
+                        new OA\Property(property: 'title', type: 'string', example: 'Introduction to Laravel', description: 'Proposal title (required)'),
+                        new OA\Property(property: 'description', type: 'string', example: 'A comprehensive guide to Laravel framework', description: 'Proposal description (required)'),
+                        new OA\Property(property: 'file', type: 'string', format: 'binary', description: 'PDF file (optional, max 4MB)'),
+                        new OA\Property(property: 'tags', type: 'array', items: new OA\Items(type: 'string'), example: ['Technology', 'Laravel'], description: 'Array of tag names (optional)'),
                     ]
                 )
             )
@@ -383,25 +385,25 @@ class ProposalController extends Controller
         responses: [
             new OA\Response(
                 response: 201,
-                description: "Proposal created successfully",
+                description: 'Proposal created successfully',
                 content: new OA\JsonContent(
                     properties: [
-                        new OA\Property(property: "status", type: "string", example: "success"),
-                        new OA\Property(property: "message", type: "string", example: "Proposal created successfully"),
+                        new OA\Property(property: 'status', type: 'string', example: 'success'),
+                        new OA\Property(property: 'message', type: 'string', example: 'Proposal created successfully'),
                         new OA\Property(
-                            property: "data",
-                            type: "object",
+                            property: 'data',
+                            type: 'object',
                             properties: [
-                                new OA\Property(property: "proposal", ref: "#/components/schemas/Proposal"),
+                                new OA\Property(property: 'proposal', ref: '#/components/schemas/Proposal'),
                             ]
                         ),
                     ]
                 )
             ),
-            new OA\Response(response: 401, description: "Unauthenticated"),
-            new OA\Response(response: 403, description: "Unauthorized"),
-            new OA\Response(response: 422, description: "Validation error"),
-            new OA\Response(response: 500, description: "Server error"),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 403, description: 'Unauthorized'),
+            new OA\Response(response: 422, description: 'Validation error'),
+            new OA\Response(response: 500, description: 'Server error'),
         ]
     )]
     public function store(StoreProposalRequest $request): JsonResponse
@@ -466,42 +468,42 @@ class ProposalController extends Controller
      * Display the specified proposal.
      */
     #[OA\Get(
-        path: "/proposals/{id}",
-        summary: "Get a specific proposal",
-        description: "Retrieves a single proposal by ID. Speakers can only view their own proposals, while reviewers and admins can view any proposal.",
-        tags: ["Proposals"],
-        security: [["sanctum" => []]],
+        path: '/proposals/{id}',
+        summary: 'Get a specific proposal',
+        description: 'Retrieves a single proposal by ID. Speakers can only view their own proposals, while reviewers and admins can view any proposal.',
+        tags: ['Proposals'],
+        security: [['sanctum' => []]],
         parameters: [
             new OA\Parameter(
-                name: "id",
-                in: "path",
+                name: 'id',
+                in: 'path',
                 required: true,
-                description: "Proposal ID",
-                schema: new OA\Schema(type: "integer", example: 1)
+                description: 'Proposal ID',
+                schema: new OA\Schema(type: 'integer', example: 1)
             ),
         ],
         responses: [
             new OA\Response(
                 response: 200,
-                description: "Proposal retrieved successfully",
+                description: 'Proposal retrieved successfully',
                 content: new OA\JsonContent(
                     properties: [
-                        new OA\Property(property: "status", type: "string", example: "success"),
-                        new OA\Property(property: "message", type: "string", example: "Proposal retrieved successfully"),
+                        new OA\Property(property: 'status', type: 'string', example: 'success'),
+                        new OA\Property(property: 'message', type: 'string', example: 'Proposal retrieved successfully'),
                         new OA\Property(
-                            property: "data",
-                            type: "object",
+                            property: 'data',
+                            type: 'object',
                             properties: [
-                                new OA\Property(property: "proposal", ref: "#/components/schemas/Proposal"),
+                                new OA\Property(property: 'proposal', ref: '#/components/schemas/Proposal'),
                             ]
                         ),
                     ]
                 )
             ),
-            new OA\Response(response: 401, description: "Unauthenticated"),
-            new OA\Response(response: 403, description: "Unauthorized"),
-            new OA\Response(response: 404, description: "Proposal not found"),
-            new OA\Response(response: 500, description: "Server error"),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 403, description: 'Unauthorized'),
+            new OA\Response(response: 404, description: 'Proposal not found'),
+            new OA\Response(response: 500, description: 'Server error'),
         ]
     )]
     public function show(Request $request, Proposal $proposal): JsonResponse
@@ -515,7 +517,7 @@ class ProposalController extends Controller
                 'Proposal retrieved successfully',
                 ['proposal' => new ProposalResource($proposal)]
             );
-        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
+        } catch (AuthorizationException $e) {
             return ApiResponse::error('Unauthorized', 403);
         } catch (\Exception $e) {
             Log::error('Error retrieving proposal', [
@@ -532,44 +534,44 @@ class ProposalController extends Controller
      * Get top-rated proposals for slider.
      */
     #[OA\Get(
-        path: "/proposals/top-rated",
-        summary: "Get top-rated proposals",
-        description: "Retrieves approved proposals with an average rating of 4.0 or higher, ordered by rating and review count. Used for displaying featured proposals in a slider.",
-        tags: ["Proposals"],
-        security: [["sanctum" => []]],
+        path: '/proposals/top-rated',
+        summary: 'Get top-rated proposals',
+        description: 'Retrieves approved proposals with an average rating of 4.0 or higher, ordered by rating and review count. Used for displaying featured proposals in a slider.',
+        tags: ['Proposals'],
+        security: [['sanctum' => []]],
         parameters: [
             new OA\Parameter(
-                name: "limit",
-                in: "query",
-                description: "Maximum number of proposals to return",
+                name: 'limit',
+                in: 'query',
+                description: 'Maximum number of proposals to return',
                 required: false,
-                schema: new OA\Schema(type: "integer", example: 10, default: 10)
+                schema: new OA\Schema(type: 'integer', example: 10, default: 10)
             ),
         ],
         responses: [
             new OA\Response(
                 response: 200,
-                description: "Top-rated proposals retrieved successfully",
+                description: 'Top-rated proposals retrieved successfully',
                 content: new OA\JsonContent(
                     properties: [
-                        new OA\Property(property: "status", type: "string", example: "success"),
-                        new OA\Property(property: "message", type: "string", example: "Top-rated proposals retrieved successfully"),
+                        new OA\Property(property: 'status', type: 'string', example: 'success'),
+                        new OA\Property(property: 'message', type: 'string', example: 'Top-rated proposals retrieved successfully'),
                         new OA\Property(
-                            property: "data",
-                            type: "object",
+                            property: 'data',
+                            type: 'object',
                             properties: [
                                 new OA\Property(
-                                    property: "proposals",
-                                    type: "array",
-                                    items: new OA\Items(ref: "#/components/schemas/Proposal")
+                                    property: 'proposals',
+                                    type: 'array',
+                                    items: new OA\Items(ref: '#/components/schemas/Proposal')
                                 ),
                             ]
                         ),
                     ]
                 )
             ),
-            new OA\Response(response: 401, description: "Unauthenticated"),
-            new OA\Response(response: 500, description: "Server error"),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 500, description: 'Server error'),
         ]
     )]
     public function topRated(Request $request): JsonResponse
@@ -619,32 +621,32 @@ class ProposalController extends Controller
      * Download the proposal file.
      */
     #[OA\Get(
-        path: "/proposals/{id}/download",
-        summary: "Download proposal PDF file",
-        description: "Downloads the PDF file associated with a proposal. Requires authentication and appropriate permissions.",
-        tags: ["Proposals"],
-        security: [["sanctum" => []]],
+        path: '/proposals/{id}/download',
+        summary: 'Download proposal PDF file',
+        description: 'Downloads the PDF file associated with a proposal. Requires authentication and appropriate permissions.',
+        tags: ['Proposals'],
+        security: [['sanctum' => []]],
         parameters: [
             new OA\Parameter(
-                name: "id",
-                in: "path",
+                name: 'id',
+                in: 'path',
                 required: true,
-                description: "Proposal ID",
-                schema: new OA\Schema(type: "integer", example: 1)
+                description: 'Proposal ID',
+                schema: new OA\Schema(type: 'integer', example: 1)
             ),
         ],
         responses: [
             new OA\Response(
                 response: 200,
-                description: "File download",
+                description: 'File download',
                 content: new OA\MediaType(
-                    mediaType: "application/pdf"
+                    mediaType: 'application/pdf'
                 )
             ),
-            new OA\Response(response: 401, description: "Unauthenticated"),
-            new OA\Response(response: 403, description: "Unauthorized"),
-            new OA\Response(response: 404, description: "File not found"),
-            new OA\Response(response: 500, description: "Server error"),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 403, description: 'Unauthorized'),
+            new OA\Response(response: 404, description: 'File not found'),
+            new OA\Response(response: 500, description: 'Server error'),
         ]
     )]
     public function downloadFile(Request $request, Proposal $proposal): BinaryFileResponse|JsonResponse
@@ -665,7 +667,7 @@ class ProposalController extends Controller
             return response()->download($filePath, basename($proposal->file_path), [
                 'Content-Type' => FileConstants::ALLOWED_MIME_TYPES[0],
             ]);
-        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
+        } catch (AuthorizationException $e) {
             return ApiResponse::error('Unauthorized', 403);
         } catch (ProposalFileNotFoundException $e) {
             return ApiResponse::error($e->getMessage(), $e->getCode());
@@ -684,30 +686,30 @@ class ProposalController extends Controller
      * Update the specified proposal.
      */
     #[OA\Put(
-        path: "/proposals/{id}",
-        summary: "Update a proposal",
-        description: "Updates an existing proposal. Speakers can only update their own proposals. All fields are optional - only provided fields will be updated.",
-        tags: ["Proposals"],
-        security: [["sanctum" => []]],
+        path: '/proposals/{id}',
+        summary: 'Update a proposal',
+        description: 'Updates an existing proposal. Speakers can only update their own proposals. All fields are optional - only provided fields will be updated.',
+        tags: ['Proposals'],
+        security: [['sanctum' => []]],
         parameters: [
             new OA\Parameter(
-                name: "id",
-                in: "path",
+                name: 'id',
+                in: 'path',
                 required: true,
-                description: "Proposal ID",
-                schema: new OA\Schema(type: "integer", example: 1)
+                description: 'Proposal ID',
+                schema: new OA\Schema(type: 'integer', example: 1)
             ),
         ],
         requestBody: new OA\RequestBody(
             required: false,
             content: new OA\MediaType(
-                mediaType: "multipart/form-data",
+                mediaType: 'multipart/form-data',
                 schema: new OA\Schema(
                     properties: [
-                        new OA\Property(property: "title", type: "string", example: "Updated Title", description: "Proposal title (optional)"),
-                        new OA\Property(property: "description", type: "string", example: "Updated description", description: "Proposal description (optional)"),
-                        new OA\Property(property: "file", type: "string", format: "binary", description: "PDF file (optional, max 4MB)"),
-                        new OA\Property(property: "tags", type: "array", items: new OA\Items(type: "string"), example: ["Technology", "Laravel"], description: "Array of tag names (optional, empty array removes all tags)"),
+                        new OA\Property(property: 'title', type: 'string', example: 'Updated Title', description: 'Proposal title (optional)'),
+                        new OA\Property(property: 'description', type: 'string', example: 'Updated description', description: 'Proposal description (optional)'),
+                        new OA\Property(property: 'file', type: 'string', format: 'binary', description: 'PDF file (optional, max 4MB)'),
+                        new OA\Property(property: 'tags', type: 'array', items: new OA\Items(type: 'string'), example: ['Technology', 'Laravel'], description: 'Array of tag names (optional, empty array removes all tags)'),
                     ]
                 )
             )
@@ -715,26 +717,26 @@ class ProposalController extends Controller
         responses: [
             new OA\Response(
                 response: 200,
-                description: "Proposal updated successfully",
+                description: 'Proposal updated successfully',
                 content: new OA\JsonContent(
                     properties: [
-                        new OA\Property(property: "status", type: "string", example: "success"),
-                        new OA\Property(property: "message", type: "string", example: "Proposal updated successfully"),
+                        new OA\Property(property: 'status', type: 'string', example: 'success'),
+                        new OA\Property(property: 'message', type: 'string', example: 'Proposal updated successfully'),
                         new OA\Property(
-                            property: "data",
-                            type: "object",
+                            property: 'data',
+                            type: 'object',
                             properties: [
-                                new OA\Property(property: "proposal", ref: "#/components/schemas/Proposal"),
+                                new OA\Property(property: 'proposal', ref: '#/components/schemas/Proposal'),
                             ]
                         ),
                     ]
                 )
             ),
-            new OA\Response(response: 401, description: "Unauthenticated"),
-            new OA\Response(response: 403, description: "Unauthorized"),
-            new OA\Response(response: 404, description: "Proposal not found"),
-            new OA\Response(response: 422, description: "Validation error"),
-            new OA\Response(response: 500, description: "Server error"),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 403, description: 'Unauthorized'),
+            new OA\Response(response: 404, description: 'Proposal not found'),
+            new OA\Response(response: 422, description: 'Validation error'),
+            new OA\Response(response: 500, description: 'Server error'),
         ]
     )]
     public function update(UpdateProposalRequest $request, Proposal $proposal): JsonResponse
@@ -806,35 +808,35 @@ class ProposalController extends Controller
      * Remove the specified proposal.
      */
     #[OA\Delete(
-        path: "/proposals/{id}",
-        summary: "Delete a proposal",
-        description: "Deletes a proposal and its associated file. Speakers can only delete their own proposals.",
-        tags: ["Proposals"],
-        security: [["sanctum" => []]],
+        path: '/proposals/{id}',
+        summary: 'Delete a proposal',
+        description: 'Deletes a proposal and its associated file. Speakers can only delete their own proposals.',
+        tags: ['Proposals'],
+        security: [['sanctum' => []]],
         parameters: [
             new OA\Parameter(
-                name: "id",
-                in: "path",
+                name: 'id',
+                in: 'path',
                 required: true,
-                description: "Proposal ID",
-                schema: new OA\Schema(type: "integer", example: 1)
+                description: 'Proposal ID',
+                schema: new OA\Schema(type: 'integer', example: 1)
             ),
         ],
         responses: [
             new OA\Response(
                 response: 200,
-                description: "Proposal deleted successfully",
+                description: 'Proposal deleted successfully',
                 content: new OA\JsonContent(
                     properties: [
-                        new OA\Property(property: "status", type: "string", example: "success"),
-                        new OA\Property(property: "message", type: "string", example: "Proposal deleted successfully"),
+                        new OA\Property(property: 'status', type: 'string', example: 'success'),
+                        new OA\Property(property: 'message', type: 'string', example: 'Proposal deleted successfully'),
                     ]
                 )
             ),
-            new OA\Response(response: 401, description: "Unauthenticated"),
-            new OA\Response(response: 403, description: "Unauthorized"),
-            new OA\Response(response: 404, description: "Proposal not found"),
-            new OA\Response(response: 500, description: "Server error"),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 403, description: 'Unauthorized'),
+            new OA\Response(response: 404, description: 'Proposal not found'),
+            new OA\Response(response: 500, description: 'Server error'),
         ]
     )]
     public function destroy(Request $request, Proposal $proposal): JsonResponse
@@ -854,7 +856,7 @@ class ProposalController extends Controller
             DB::commit();
 
             return ApiResponse::success('Proposal deleted successfully');
-        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
+        } catch (AuthorizationException $e) {
             return ApiResponse::error('Unauthorized', 403);
         } catch (\Exception $e) {
             DB::rollBack();

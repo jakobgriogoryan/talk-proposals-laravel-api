@@ -123,7 +123,7 @@ class ReviewTest extends TestCase
      */
     public function test_can_list_reviews_for_proposal(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['role' => UserRole::REVIEWER->value]);
         $proposal = Proposal::factory()->create();
         Review::factory()->count(3)->create(['proposal_id' => $proposal->id]);
 

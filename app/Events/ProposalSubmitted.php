@@ -28,7 +28,7 @@ class ProposalSubmitted implements ShouldBroadcast
     /**
      * Get the channels the event should broadcast on.
      *
-     * @return array<int, \Illuminate\Broadcasting\Channel>
+     * @return array<int, Channel>
      */
     public function broadcastOn(): array
     {
@@ -54,7 +54,7 @@ class ProposalSubmitted implements ShouldBroadcast
     public function broadcastWith(): array
     {
         // Ensure user relationship is loaded
-        if (!$this->proposal->relationLoaded('user')) {
+        if (! $this->proposal->relationLoaded('user')) {
             $this->proposal->load('user');
         }
 
