@@ -6,7 +6,6 @@ namespace App\Events;
 
 use App\Models\Proposal;
 use App\Models\Review;
-use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
@@ -36,7 +35,7 @@ class ProposalReviewed implements ShouldBroadcast
     {
         return [
             new PrivateChannel('proposals'),
-            new PrivateChannel('proposal.'.$this->proposal->id),
+            new PrivateChannel('proposals.'.$this->proposal->id),
             new PrivateChannel('user.'.$this->proposal->user_id), // Notify the speaker
         ];
     }
@@ -57,7 +56,7 @@ class ProposalReviewed implements ShouldBroadcast
     public function broadcastWith(): array
     {
         // Ensure relationships are loaded
-        if (!$this->review->relationLoaded('reviewer')) {
+        if (! $this->review->relationLoaded('reviewer')) {
             $this->review->load('reviewer');
         }
 

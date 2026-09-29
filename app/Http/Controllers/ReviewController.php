@@ -121,6 +121,8 @@ class ReviewController extends Controller
     )]
     public function index(Request $request, Proposal $proposal): JsonResponse
     {
+        $this->authorize('view', $proposal);
+
         try {
             $reviews = $proposal->reviews()->with('reviewer')->latest()->get();
 
@@ -291,6 +293,8 @@ class ReviewController extends Controller
     )]
     public function show(Request $request, Proposal $proposal, Review $review): JsonResponse
     {
+        $this->authorize('view', $proposal);
+
         try {
             if ($review->proposal_id !== $proposal->id) {
                 return ApiResponse::error('Review not found for this proposal', 404);

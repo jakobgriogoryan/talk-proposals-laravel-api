@@ -13,20 +13,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // Add StartSession middleware to API routes so sessions can be used
-        $middleware->api(prepend: [
-            \Illuminate\Session\Middleware\StartSession::class,
-        ]);
-
-        // statefulApi() applies EnsureFrontendRequestsAreStateful which enables sessions
-        // and handles CSRF for requests from stateful domains
+        // Apply Sanctum's stateful SPA middleware, including sessions and CSRF validation,
+        // only to requests from configured first-party frontend domains.
         $middleware->statefulApi();
-
-        // CSRF validation: Only apply to web routes, not API routes
-        // API routes are handled by Sanctum's EnsureFrontendRequestsAreStateful middleware
-        $middleware->validateCsrfTokens(except: [
-            'api/*',
-        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

@@ -25,7 +25,7 @@ class ReviewPolicy
      */
     public function view(User $user, Review $review): bool
     {
-        return true;
+        return $user->can('view', $review->proposal);
     }
 
     /**
