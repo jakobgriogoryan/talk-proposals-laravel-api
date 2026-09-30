@@ -12,10 +12,16 @@ return Application::configure(basePath: dirname(__DIR__))
         channels: __DIR__.'/../routes/channels.php',
         health: '/up',
     )
+    ->withProviders([
+        \App\Providers\RouteServiceProvider::class,
+    ])
     ->withMiddleware(function (Middleware $middleware): void {
         // Apply Sanctum's stateful SPA middleware, including sessions and CSRF validation,
         // only to requests from configured first-party frontend domains.
         $middleware->statefulApi();
+
+        // Add request/response logging middleware (development only)
+        $middleware->append(\App\Http\Middleware\LogRequestResponse::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

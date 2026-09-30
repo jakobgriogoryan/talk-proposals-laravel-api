@@ -2,6 +2,7 @@
 
 namespace App\Helpers;
 
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Response;
 
@@ -10,9 +11,9 @@ class ApiResponse
     /**
      * Return a successful JSON response.
      *
-     * @param  mixed  $data
+     * @param mixed|null $data
      */
-    public static function success(string $message, $data = null, int $statusCode = 200): JsonResponse
+    public static function success(string $message, mixed $data = null, int $statusCode = 200): JsonResponse
     {
         $response = [
             'status' => 'success',
@@ -29,9 +30,9 @@ class ApiResponse
     /**
      * Return an error JSON response.
      *
-     * @param  mixed  $errors
+     * @param mixed|null $errors
      */
-    public static function error(string $message, int $statusCode = 400, $errors = null): JsonResponse
+    public static function error(string $message, int $statusCode = 400, mixed $errors = null): JsonResponse
     {
         $response = [
             'status' => 'error',
@@ -48,9 +49,9 @@ class ApiResponse
     /**
      * Return a validation error JSON response.
      *
-     * @param  \Illuminate\Contracts\Validation\Validator|array  $errors
+     * @param array|Validator $errors
      */
-    public static function validationError($errors, string $message = 'Validation failed'): JsonResponse
+    public static function validationError(Validator|array $errors, string $message = 'Validation failed'): JsonResponse
     {
         if (is_object($errors) && method_exists($errors, 'errors')) {
             $errors = $errors->errors();

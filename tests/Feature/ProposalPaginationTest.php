@@ -66,8 +66,9 @@ class ProposalPaginationTest extends TestCase
         $response = $this->actingAs($user, 'sanctum')
             ->getJson('/api/proposals?per_page=200'); // Exceeds max
 
-        $response->assertStatus(200);
-        $this->assertLessThanOrEqual(100, $response->json('data.pagination.per_page'));
+        // Validation should reject values exceeding max
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['per_page']);
     }
 
     /**

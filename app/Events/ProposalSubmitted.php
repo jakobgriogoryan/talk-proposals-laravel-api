@@ -20,7 +20,9 @@ class ProposalSubmitted implements ShouldBroadcast
      * Create a new event instance.
      */
     public function __construct(
-        public Proposal $proposal
+        public Proposal $proposal,
+        public ?string $filePath = null,
+        public ?int $userId = null
     ) {
         //
     }

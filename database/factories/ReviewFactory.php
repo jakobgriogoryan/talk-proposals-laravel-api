@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\ReviewRating;
 use App\Models\Proposal;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -18,11 +19,13 @@ class ReviewFactory extends Factory
      */
     public function definition(): array
     {
+        $validRatings = ReviewRating::values();
+        
         return [
             'proposal_id' => Proposal::factory(),
             'reviewer_id' => User::factory()->state(['role' => 'reviewer']),
-            'rating' => fake()->numberBetween(1, 5),
-            'comment' => fake()->optional()->paragraph(),
+            'rating' => fake()->randomElement($validRatings),
+            'comment' => fake()->optional(0.7)->paragraph(), // 70% chance of having a comment
         ];
     }
 }

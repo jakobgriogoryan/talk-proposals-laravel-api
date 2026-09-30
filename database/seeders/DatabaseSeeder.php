@@ -21,52 +21,116 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // Create admin user
-        $admin = User::factory()->create([
-            'name' => 'Admin User',
-            'email' => 'admin@example.com',
-            'role' => UserRole::ADMIN->value,
-        ]);
+        // Create admin user (only if doesn't exist)
+        User::firstOrCreate(
+            ['email' => 'admin@example.com'],
+            [
+                'name' => 'Admin User',
+                'email' => 'admin@example.com',
+                'role' => UserRole::ADMIN->value,
+                'password' => bcrypt('password'), // Default password
+            ]
+        );
 
-        // Create reviewer users
-        $reviewers = User::factory()->count(3)->create([
-            'role' => UserRole::REVIEWER->value,
-        ]);
+        // Create reviewer users (only if needed)
+        $existingReviewers = User::where('role', UserRole::REVIEWER->value)->count();
+        $reviewersNeeded = max(0, 5 - $existingReviewers);
+        $reviewers = User::where('role', UserRole::REVIEWER->value)->get();
 
-        // Create speaker users
-        $speakers = User::factory()->count(5)->create([
-            'role' => UserRole::SPEAKER->value,
-        ]);
-
-        // Create tags
-        $tags = Tag::factory()->count(10)->create();
-
-        // Create proposals for speakers
-        $proposals = Proposal::factory()
-            ->count(20)
-            ->create([
-                'user_id' => fn () => $speakers->random()->id,
+        if ($reviewersNeeded > 0) {
+            $newReviewers = User::factory()->count($reviewersNeeded)->create([
+                'role' => UserRole::REVIEWER->value,
             ]);
-
-        // Attach tags to proposals
-        foreach ($proposals as $proposal) {
-            $proposal->tags()->attach(
-                $tags->random(rand(1, 3))->pluck('id')->toArray()
-            );
+            $reviewers = $reviewers->merge($newReviewers);
         }
 
-        // Create reviews for some proposals
-        foreach ($proposals->take(15) as $proposal) {
-            // Each proposal should have at most one review per reviewer
-            $reviewerSample = $reviewers->random(
-                rand(1, min(3, $reviewers->count()))
-            );
+        // Create speaker users (only if needed)
+        $existingSpeakers = User::where('role', UserRole::SPEAKER->value)->count();
+        $speakersNeeded = max(0, 5 - $existingSpeakers);
+        $speakers = User::where('role', UserRole::SPEAKER->value)->get();
 
-            foreach ($reviewerSample as $reviewer) {
-                Review::factory()->create([
-                    'proposal_id' => $proposal->id,
-                    'reviewer_id' => $reviewer->id,
+        if ($speakersNeeded > 0) {
+            $newSpeakers = User::factory()->count($speakersNeeded)->create([
+                'role' => UserRole::SPEAKER->value,
+            ]);
+            $speakers = $speakers->merge($newSpeakers);
+        }
+
+        // Create tags (only if needed, using firstOrCreate to avoid duplicates)
+        $tags = Tag::all();
+        $tagsNeeded = max(0, 10 - $tags->count());
+
+        if ($tagsNeeded > 0) {
+            $attempts = 0;
+            $maxAttempts = $tagsNeeded * 3; // Allow some retries for unique constraint
+
+            while ($tags->count() < 10 && $attempts < $maxAttempts) {
+                try {
+                    $newTag = Tag::factory()->create();
+                    $tags->push($newTag);
+                } catch (\Illuminate\Database\QueryException $e) {
+                    // Ignore duplicate errors and continue
+                    if (!str_contains($e->getMessage(), 'Duplicate entry')) {
+                        throw $e;
+                    }
+                }
+                $attempts++;
+            }
+        }
+
+        // Create proposals for speakers (only if needed)
+        $existingProposals = Proposal::count();
+        $proposalsNeeded = max(0, 20 - $existingProposals);
+        $proposals = Proposal::all();
+
+        if ($proposalsNeeded > 0 && $speakers->isNotEmpty()) {
+            $newProposals = Proposal::factory()
+                ->count($proposalsNeeded)
+                ->create([
+                    'user_id' => fn () => $speakers->random()->id,
                 ]);
+            $proposals = $proposals->merge($newProposals);
+        }
+
+        // Attach tags to proposals (only if tags exist)
+        if ($tags->isNotEmpty()) {
+            foreach ($proposals as $proposal) {
+                // Only attach if proposal doesn't already have tags
+                if ($proposal->tags()->count() === 0) {
+                    $proposal->tags()->attach(
+                        $tags->random(rand(1, min(3, $tags->count())))->pluck('id')->toArray()
+                    );
+                }
+            }
+        }
+
+        // Create reviews for some proposals (only if reviewers exist)
+        if ($reviewers->isNotEmpty() && $proposals->isNotEmpty()) {
+            foreach ($proposals->take(15) as $proposal) {
+                // Get reviewers who haven't reviewed this proposal yet
+                $existingReviewerIds = Review::where('proposal_id', $proposal->id)
+                    ->pluck('reviewer_id')
+                    ->toArray();
+
+                $availableReviewers = $reviewers->reject(function ($reviewer) use ($existingReviewerIds) {
+                    return in_array($reviewer->id, $existingReviewerIds, true);
+                });
+
+                if ($availableReviewers->isEmpty()) {
+                    continue;
+                }
+
+                // Each proposal should have at most one review per reviewer
+                $reviewerSample = $availableReviewers->random(
+                    rand(1, min(3, $availableReviewers->count()))
+                );
+
+                foreach ($reviewerSample as $reviewer) {
+                    Review::factory()->create([
+                        'proposal_id' => $proposal->id,
+                        'reviewer_id' => $reviewer->id,
+                    ]);
+                }
             }
         }
     }

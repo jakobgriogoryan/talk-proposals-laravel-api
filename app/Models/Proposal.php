@@ -6,11 +6,13 @@ namespace App\Models;
 
 use App\Enums\ProposalStatus;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 use Laravel\Scout\Searchable;
 
 /**
@@ -22,14 +24,17 @@ use Laravel\Scout\Searchable;
  * @property string $description
  * @property string|null $file_path
  * @property ProposalStatus|string $status
- * @property \Illuminate\Support\Carbon|null $created_at
- * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  * @property-read User $user
- * @property-read \Illuminate\Database\Eloquent\Collection<int, Tag> $tags
- * @property-read \Illuminate\Database\Eloquent\Collection<int, Review> $reviews
+ * @property-read Collection<int, Tag> $tags
+ * @property-read Collection<int, Review> $reviews
  * @property-read float|null $avg_rating
  * @property-read int|null $reviews_count
  * @property-read float|null $reviews_avg_rating
+ * @method static searchByTitle(string $string)
+ * @method static byTags(array $array)
+ * @method static byStatus(string $string)
  */
 class Proposal extends Model
 {
@@ -279,5 +284,33 @@ class Proposal extends Model
     public function getScoutKeyName(): string
     {
         return 'id';
+    }
+
+    /**
+     * Determine if the model should be searchable.
+     * Only sync to Scout if the driver is properly configured.
+     *
+     * @return bool
+     */
+    public function shouldBeSearchable(): bool
+    {
+        $driver = config('scout.driver', 'collection');
+
+        // If driver is 'null' or 'collection', allow syncing (these don't require external services)
+        if (in_array($driver, ['null', 'collection', 'database'])) {
+            return true;
+        }
+
+        // If driver is 'algolia', check if credentials are configured
+        if ($driver === 'algolia') {
+            $appId = config('scout.algolia.id', '');
+            $secret = config('scout.algolia.secret', '');
+
+            return !empty($appId) && !empty($secret);
+        }
+
+        // For other drivers (meilisearch, typesense), allow syncing
+        // They will handle their own configuration errors
+        return true;
     }
 }

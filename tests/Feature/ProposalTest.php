@@ -28,14 +28,17 @@ class ProposalTest extends TestCase
         Storage::fake('public');
 
         $speaker = User::factory()->create(['role' => UserRole::SPEAKER->value]);
-        $file = UploadedFile::fake()->create('proposal.pdf', 100);
+        // Create a fake PDF file with proper PDF magic bytes
+        $file = UploadedFile::fake()->createWithContent('proposal.pdf', '%PDF-1.4 fake pdf content for testing');
 
         $response = $this->actingAs($speaker, 'sanctum')
-            ->postJson('/api/proposals', [
+            ->post('/api/proposals', [
                 'title' => 'Test Proposal',
                 'description' => 'Test Description',
                 'file' => $file,
                 'tags' => ['Laravel', 'PHP'],
+            ], [
+                'Accept' => 'application/json',
             ]);
 
         $response->assertStatus(201)

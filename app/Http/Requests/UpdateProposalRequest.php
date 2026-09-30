@@ -7,6 +7,7 @@ namespace App\Http\Requests;
 use App\Constants\FileConstants;
 use App\Constants\ValidationConstants;
 use App\Models\Proposal;
+use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
@@ -28,7 +29,7 @@ class UpdateProposalRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+     * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {
@@ -49,6 +50,7 @@ class UpdateProposalRequest extends FormRequest
                 'nullable',
                 'file',
                 'mimes:'.implode(',', FileConstants::ALLOWED_EXTENSIONS),
+                'mimetypes:'.implode(',', FileConstants::ALLOWED_MIME_TYPES),
                 'max:'.FileConstants::MAX_FILE_SIZE_KB,
             ],
             'tags' => [
@@ -79,6 +81,7 @@ class UpdateProposalRequest extends FormRequest
             'description.string' => 'The proposal description must be a valid text.',
             'file.file' => 'The uploaded file must be a valid file.',
             'file.mimes' => 'The file must be a PDF document.',
+            'file.mimetypes' => 'The file must have a valid PDF MIME type.',
             'file.max' => 'The file size must not exceed '.(FileConstants::MAX_FILE_SIZE_KB / 1024).'MB.',
             'tags.array' => 'Tags must be provided as an array.',
             'tags.*.required' => 'Each tag is required.',
