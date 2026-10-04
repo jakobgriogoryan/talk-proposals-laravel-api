@@ -60,4 +60,3 @@ class IndexReviewRequest extends FormRequest
         ];
     }
 }
-

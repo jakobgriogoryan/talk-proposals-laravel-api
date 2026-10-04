@@ -114,6 +114,13 @@ queue/import workflow, authenticated remote configuration, and engine switching.
 
 ## Proposal workflow guarantees
 
+Proposal and admin listings share filter validation through
+`IndexProposalRequest`; admin requests add owner validation and retain separate
+admin-only authorization. Tag filters accept arrays or comma-separated positive
+integer IDs. Malformed IDs and nested arrays return `422` instead of being
+silently cast into search filters. IDs need not exist: a valid unknown ID simply
+matches no proposals. Coverage: `ProposalFilterValidationTest`.
+
 - Attachment replacements validate PDF structure and the proposal owner's quota before changing the record. The old file is removed after commit; a rollback removes only the new upload.
 - File-processing jobs ignore superseded attachments. Validation rejections clear the matching record and its cache; temporary processing failures retain the file for retry. Stored files are not counted twice against quota.
 - Editing review ratings queues a search-index refresh without sending a new-review notification. Proposal changes invalidate every supported top-rated limit (1–50).
@@ -144,3 +151,14 @@ Downloads still pass through the authenticated, policy-protected API endpoint.
 
 See [original task review](TASK_SPEC_REVIEW.md) for requirement mapping and the
 intentional restriction on administrator self-registration.
+
+## Code quality checks
+
+```sh
+composer test
+composer format:check
+```
+
+`composer format` applies the repository's Laravel Pint rules. Keep validation
+tests explicit about successful HTTP statuses; a test that only excludes `422`
+can accidentally accept an authorization or server failure.

@@ -16,59 +16,58 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Log;
 use OpenApi\Attributes as OA;
 
 /**
  * Controller for authentication.
  */
-#[OA\Tag(name: "Authentication")]
+#[OA\Tag(name: 'Authentication')]
 class AuthController extends Controller
 {
     /**
      * Register a new user.
      */
     #[OA\Post(
-        path: "/register",
-        description: "Creates a new user account with the provided information. The user will be automatically logged in after registration.",
-        summary: "Register a new user",
+        path: '/register',
+        description: 'Creates a new user account with the provided information. The user will be automatically logged in after registration.',
+        summary: 'Register a new user',
         requestBody: new OA\RequestBody(
             required: true,
             content: new OA\JsonContent(
-                required: ["name", "email", "password", "password_confirmation", "role"],
+                required: ['name', 'email', 'password', 'password_confirmation', 'role'],
                 properties: [
-                    new OA\Property(property: "name", description: "User's full name", type: "string", example: "John Doe"),
-                    new OA\Property(property: "email", description: "User's email address", type: "string", format: "email", example: "john@example.com"),
-                    new OA\Property(property: "password", description: "User's password", type: "string", format: "password", example: "password123"),
-                    new OA\Property(property: "password_confirmation", description: "Password confirmation", type: "string", format: "password", example: "password123"),
-                    new OA\Property(property: "role", description: "User role (speaker or reviewer)", type: "string", enum: ["speaker", "reviewer"], example: "speaker"),
+                    new OA\Property(property: 'name', description: "User's full name", type: 'string', example: 'John Doe'),
+                    new OA\Property(property: 'email', description: "User's email address", type: 'string', format: 'email', example: 'john@example.com'),
+                    new OA\Property(property: 'password', description: "User's password", type: 'string', format: 'password', example: 'password123'),
+                    new OA\Property(property: 'password_confirmation', description: 'Password confirmation', type: 'string', format: 'password', example: 'password123'),
+                    new OA\Property(property: 'role', description: 'User role (speaker or reviewer)', type: 'string', enum: ['speaker', 'reviewer'], example: 'speaker'),
                 ]
             )
         ),
-        tags: ["Authentication"],
+        tags: ['Authentication'],
         responses: [
             new OA\Response(
                 response: 201,
-                description: "Registration successful",
+                description: 'Registration successful',
                 content: new OA\JsonContent(
                     properties: [
-                        new OA\Property(property: "status", type: "string", example: "success"),
-                        new OA\Property(property: "message", type: "string", example: "Registration successful"),
+                        new OA\Property(property: 'status', type: 'string', example: 'success'),
+                        new OA\Property(property: 'message', type: 'string', example: 'Registration successful'),
                         new OA\Property(
-                            property: "data",
+                            property: 'data',
                             properties: [
                                 new OA\Property(
-                                    property: "user",
-                                    ref: "#/components/schemas/User"
+                                    property: 'user',
+                                    ref: '#/components/schemas/User'
                                 ),
                             ],
-                            type: "object"
+                            type: 'object'
                         ),
                     ]
                 )
             ),
-            new OA\Response(response: 422, description: "Validation error"),
-            new OA\Response(response: 500, description: "Server error"),
+            new OA\Response(response: 422, description: 'Validation error'),
+            new OA\Response(response: 500, description: 'Server error'),
         ]
     )]
     public function register(RegisterRequest $request): JsonResponse
@@ -112,44 +111,44 @@ class AuthController extends Controller
      * Login user.
      */
     #[OA\Post(
-        path: "/login",
-        description: "Authenticates a user with email and password. Uses Laravel Sanctum for SPA authentication with session cookies.",
-        summary: "Login user",
+        path: '/login',
+        description: 'Authenticates a user with email and password. Uses Laravel Sanctum for SPA authentication with session cookies.',
+        summary: 'Login user',
         requestBody: new OA\RequestBody(
             required: true,
             content: new OA\JsonContent(
-                required: ["email", "password"],
+                required: ['email', 'password'],
                 properties: [
-                    new OA\Property(property: "email", type: "string", format: "email", example: "john@example.com"),
-                    new OA\Property(property: "password", type: "string", format: "password", example: "password123"),
-                    new OA\Property(property: "remember", description: "Remember user session", type: "boolean", example: false),
+                    new OA\Property(property: 'email', type: 'string', format: 'email', example: 'john@example.com'),
+                    new OA\Property(property: 'password', type: 'string', format: 'password', example: 'password123'),
+                    new OA\Property(property: 'remember', description: 'Remember user session', type: 'boolean', example: false),
                 ]
             )
         ),
-        tags: ["Authentication"],
+        tags: ['Authentication'],
         responses: [
             new OA\Response(
                 response: 200,
-                description: "Login successful",
+                description: 'Login successful',
                 content: new OA\JsonContent(
                     properties: [
-                        new OA\Property(property: "status", type: "string", example: "success"),
-                        new OA\Property(property: "message", type: "string", example: "Login successful"),
+                        new OA\Property(property: 'status', type: 'string', example: 'success'),
+                        new OA\Property(property: 'message', type: 'string', example: 'Login successful'),
                         new OA\Property(
-                            property: "data",
+                            property: 'data',
                             properties: [
                                 new OA\Property(
-                                    property: "user",
-                                    ref: "#/components/schemas/User"
+                                    property: 'user',
+                                    ref: '#/components/schemas/User'
                                 ),
                             ],
-                            type: "object"
+                            type: 'object'
                         ),
                     ]
                 )
             ),
-            new OA\Response(response: 401, description: "Invalid credentials"),
-            new OA\Response(response: 500, description: "Server error"),
+            new OA\Response(response: 401, description: 'Invalid credentials'),
+            new OA\Response(response: 500, description: 'Server error'),
         ]
     )]
     public function login(LoginRequest $request): JsonResponse
@@ -194,34 +193,34 @@ class AuthController extends Controller
      * Get authenticated user.
      */
     #[OA\Get(
-        path: "/user",
+        path: '/user',
         description: "Returns the currently authenticated user's information.",
-        summary: "Get authenticated user",
-        security: [["sanctum" => []]],
-        tags: ["Authentication"],
+        summary: 'Get authenticated user',
+        security: [['sanctum' => []]],
+        tags: ['Authentication'],
         responses: [
             new OA\Response(
                 response: 200,
-                description: "User retrieved successfully",
+                description: 'User retrieved successfully',
                 content: new OA\JsonContent(
                     properties: [
-                        new OA\Property(property: "status", type: "string", example: "success"),
-                        new OA\Property(property: "message", type: "string", example: "User retrieved successfully"),
+                        new OA\Property(property: 'status', type: 'string', example: 'success'),
+                        new OA\Property(property: 'message', type: 'string', example: 'User retrieved successfully'),
                         new OA\Property(
-                            property: "data",
+                            property: 'data',
                             properties: [
                                 new OA\Property(
-                                    property: "user",
-                                    ref: "#/components/schemas/User"
+                                    property: 'user',
+                                    ref: '#/components/schemas/User'
                                 ),
                             ],
-                            type: "object"
+                            type: 'object'
                         ),
                     ]
                 )
             ),
-            new OA\Response(response: 401, description: "Unauthenticated"),
-            new OA\Response(response: 500, description: "Server error"),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 500, description: 'Server error'),
         ]
     )]
     public function user(Request $request): JsonResponse
@@ -253,23 +252,23 @@ class AuthController extends Controller
      * Logout user.
      */
     #[OA\Post(
-        path: "/logout",
-        description: "Logs out the currently authenticated user and invalidates the session.",
-        summary: "Logout user",
-        security: [["sanctum" => []]],
-        tags: ["Authentication"],
+        path: '/logout',
+        description: 'Logs out the currently authenticated user and invalidates the session.',
+        summary: 'Logout user',
+        security: [['sanctum' => []]],
+        tags: ['Authentication'],
         responses: [
             new OA\Response(
                 response: 200,
-                description: "Logout successful",
+                description: 'Logout successful',
                 content: new OA\JsonContent(
                     properties: [
-                        new OA\Property(property: "status", type: "string", example: "success"),
-                        new OA\Property(property: "message", type: "string", example: "Logout successful"),
+                        new OA\Property(property: 'status', type: 'string', example: 'success'),
+                        new OA\Property(property: 'message', type: 'string', example: 'Logout successful'),
                     ]
                 )
             ),
-            new OA\Response(response: 500, description: "Server error"),
+            new OA\Response(response: 500, description: 'Server error'),
         ]
     )]
     public function logout(Request $request): JsonResponse

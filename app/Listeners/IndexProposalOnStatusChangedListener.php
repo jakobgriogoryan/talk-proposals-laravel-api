@@ -6,13 +6,13 @@ namespace App\Listeners;
 
 use App\Events\ProposalStatusChanged;
 use App\Jobs\IndexProposalJob;
+
 /**
  * Listener for ProposalStatusChanged event.
  * Dispatches IndexProposalJob to update search index.
  */
 class IndexProposalOnStatusChangedListener
 {
-
     /**
      * Handle the event.
      */
@@ -21,4 +21,3 @@ class IndexProposalOnStatusChangedListener
         IndexProposalJob::dispatch($event->proposal);
     }
 }
-

@@ -63,4 +63,3 @@ class ProposalSubmittedNotification extends Mailable
         return [];
     }
 }
-

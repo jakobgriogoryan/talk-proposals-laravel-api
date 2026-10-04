@@ -29,4 +29,3 @@ class SendProposalStatusChangedNotificationListener implements ShouldQueue
         );
     }
 }
-

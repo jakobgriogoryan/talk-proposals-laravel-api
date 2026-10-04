@@ -32,4 +32,3 @@ class ProcessProposalFileListener implements ShouldQueue
         }
     }
 }
-

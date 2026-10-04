@@ -10,8 +10,6 @@ class ApiResponse
 {
     /**
      * Return a successful JSON response.
-     *
-     * @param mixed|null $data
      */
     public static function success(string $message, mixed $data = null, int $statusCode = 200): JsonResponse
     {
@@ -29,8 +27,6 @@ class ApiResponse
 
     /**
      * Return an error JSON response.
-     *
-     * @param mixed|null $errors
      */
     public static function error(string $message, int $statusCode = 400, mixed $errors = null): JsonResponse
     {
@@ -48,8 +44,6 @@ class ApiResponse
 
     /**
      * Return a validation error JSON response.
-     *
-     * @param array|Validator $errors
      */
     public static function validationError(Validator|array $errors, string $message = 'Validation failed'): JsonResponse
     {

@@ -51,10 +51,11 @@ class SendProposalStatusChangedNotificationJob implements ShouldQueue
             // Get the proposal speaker
             $speaker = $this->proposal->user;
 
-            if (!$speaker) {
+            if (! $speaker) {
                 Log::warning('Proposal has no speaker to notify about status change', [
                     'proposal_id' => $this->proposal->id,
                 ]);
+
                 return;
             }
 
@@ -95,4 +96,3 @@ class SendProposalStatusChangedNotificationJob implements ShouldQueue
         ]);
     }
 }
-

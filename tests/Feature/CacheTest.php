@@ -150,4 +150,3 @@ class CacheTest extends TestCase
         $this->assertFalse(Cache::has($cacheKey));
     }
 }
-

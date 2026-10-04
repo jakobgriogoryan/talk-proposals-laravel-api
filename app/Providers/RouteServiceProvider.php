@@ -41,8 +41,8 @@ class RouteServiceProvider extends ServiceProvider
             $maxAttempts = (int) config('app.rate_limit.proposals_per_hour', 10);
             $decayMinutes = (int) config('app.rate_limit.proposals_decay_minutes', 60);
 
-            $key = $request->user() 
-                ? 'proposals:user:'.$request->user()->id 
+            $key = $request->user()
+                ? 'proposals:user:'.$request->user()->id
                 : 'proposals:ip:'.$request->ip();
 
             return Limit::perMinutes($decayMinutes, $maxAttempts)
@@ -58,14 +58,14 @@ class RouteServiceProvider extends ServiceProvider
         // Rate limiter for file uploads (DoS protection)
         // Limits: 20 uploads per hour per authenticated user, 5 per hour per IP
         RateLimiter::for('uploads', function (Request $request) {
-            $maxAttempts = $request->user() 
+            $maxAttempts = $request->user()
                 ? (int) config('app.rate_limit.uploads_per_hour_user', 20)
                 : (int) config('app.rate_limit.uploads_per_hour_ip', 5);
-            
+
             $decayMinutes = (int) config('app.rate_limit.uploads_decay_minutes', 60);
 
-            $key = $request->user() 
-                ? 'uploads:user:'.$request->user()->id 
+            $key = $request->user()
+                ? 'uploads:user:'.$request->user()->id
                 : 'uploads:ip:'.$request->ip();
 
             return Limit::perMinutes($decayMinutes, $maxAttempts)
@@ -79,4 +79,3 @@ class RouteServiceProvider extends ServiceProvider
         });
     }
 }
-

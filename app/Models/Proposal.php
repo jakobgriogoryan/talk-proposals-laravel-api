@@ -33,6 +33,7 @@ use Laravel\Scout\Searchable;
  * @property-read float|null $avg_rating
  * @property-read int|null $reviews_count
  * @property-read float|null $reviews_avg_rating
+ *
  * @method static searchByTitle(string $string)
  * @method static byTags(array $array)
  * @method static byStatus(string $string)
@@ -290,8 +291,6 @@ class Proposal extends Model
     /**
      * Determine if the model should be searchable.
      * Only sync to Scout if the driver is properly configured.
-     *
-     * @return bool
      */
     public function shouldBeSearchable(): bool
     {

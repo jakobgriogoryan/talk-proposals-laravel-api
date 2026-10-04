@@ -25,4 +25,3 @@ class IndexProposalOnReviewedListener implements ShouldQueue
         IndexProposalJob::dispatch($event->proposal);
     }
 }
-

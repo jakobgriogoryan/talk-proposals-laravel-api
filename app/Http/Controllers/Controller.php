@@ -20,10 +20,10 @@ abstract class Controller extends BaseController
     /**
      * Log error with structured context.
      *
-     * @param string $message The error message
-     * @param \Exception|\Throwable $exception The exception
-     * @param Request|null $request The request object
-     * @param array<string, mixed> $additionalContext Additional context to include
+     * @param  string  $message  The error message
+     * @param  \Exception|\Throwable  $exception  The exception
+     * @param  Request|null  $request  The request object
+     * @param  array<string, mixed>  $additionalContext  Additional context to include
      */
     protected function logError(
         string $message,

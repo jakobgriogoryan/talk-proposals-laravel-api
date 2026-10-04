@@ -68,4 +68,3 @@ class IndexTagRequest extends FormRequest
         ];
     }
 }
-

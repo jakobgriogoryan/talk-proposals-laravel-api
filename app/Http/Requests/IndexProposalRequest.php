@@ -21,7 +21,7 @@ class IndexProposalRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user()->can('viewAny', Proposal::class);
+        return $this->user()?->can('viewAny', Proposal::class) ?? false;
     }
 
     /**
@@ -38,16 +38,8 @@ class IndexProposalRequest extends FormRequest
                 'string',
                 'max:255',
             ],
-            'tags' => [
-                'sometimes',
-                'nullable',
-                function ($attribute, $value, $fail) {
-                    // Accept both array and comma-separated string
-                    if (! is_array($value) && ! is_string($value)) {
-                        $fail('The tags must be an array or comma-separated string.');
-                    }
-                },
-            ],
+            'tags' => ['sometimes', 'nullable', 'array'],
+            'tags.*' => ['required', 'integer', 'min:1'],
             'status' => [
                 'sometimes',
                 'nullable',
@@ -80,7 +72,7 @@ class IndexProposalRequest extends FormRequest
         return [
             'search.string' => 'The search query must be a valid string.',
             'search.max' => 'The search query cannot exceed 255 characters.',
-            'tags.array' => 'Tags must be provided as an array or comma-separated string.',
+            'tags.array' => 'The tags must be an array or comma-separated string.',
             'status.in' => 'The status must be one of: '.implode(', ', ProposalStatus::values()).'.',
             'page.integer' => 'The page number must be an integer.',
             'page.min' => 'The page number must be at least 1.',
@@ -103,4 +95,3 @@ class IndexProposalRequest extends FormRequest
         }
     }
 }
-
