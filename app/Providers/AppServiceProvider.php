@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Helpers\AlgoliaConfiguration;
 use App\Models\Proposal;
 use App\Models\Review;
 use App\Policies\ProposalPolicy;
@@ -41,16 +42,9 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->registerPolicies();
 
-        // Auto-fallback Scout driver if Algolia is selected but credentials are missing
-        $scoutDriver = config('scout.driver', 'collection');
-        if ($scoutDriver === 'algolia') {
-            $appId = config('scout.algolia.id', '');
-            $secret = config('scout.algolia.secret', '');
-
-            if (empty($appId) || empty($secret)) {
-                // Fallback to collection driver if Algolia credentials are missing
-                Config::set('scout.driver', 'collection');
-            }
+        // Copied example credentials must not cause requests to invalid hosts.
+        if (config('scout.driver') === 'algolia' && ! AlgoliaConfiguration::isConfigured()) {
+            Config::set('scout.driver', 'collection');
         }
     }
 }

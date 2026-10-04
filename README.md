@@ -92,6 +92,18 @@ To rebuild a stale index after fixing connectivity, use
 `php artisan scout:import 'App\Models\Proposal'`. For local development without Algolia, use
 `SCOUT_DRIVER=collection` instead.
 
+Local development defaults to `collection` and uses database title search.
+Algolia example credentials do not activate remote requests or indexing. To
+enable Algolia later, set real server-side credentials and `SCOUT_DRIVER=algolia`,
+clear configuration, restart the queue worker, sync settings with
+`php artisan scout:sync-index-settings`, and run `php artisan scout:check-algolia`.
+The check is read-only and validates connection, permissions and filter settings
+without exposing credentials. Then queue a fresh `scout:import-proposals` import;
+its output reports queued work, not completed indexing. See
+[SCOUT_SEARCH_SETUP.md](SCOUT_SEARCH_SETUP.md) for the full workflow.
+Custom indexing jobs for proposals deleted before the worker runs are discarded
+instead of retried as failures.
+
 ## Proposal workflow guarantees
 
 - Attachment replacements validate PDF structure and the proposal owner's quota before changing the record. The old file is removed after commit; a rollback removes only the new upload.

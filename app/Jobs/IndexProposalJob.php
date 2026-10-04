@@ -32,6 +32,8 @@ class IndexProposalJob implements ShouldQueue
      */
     public int $backoff = 5;
 
+    public bool $deleteWhenMissingModels = true;
+
     /**
      * Create a new job instance.
      */

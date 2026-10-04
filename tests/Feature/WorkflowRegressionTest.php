@@ -211,7 +211,7 @@ class WorkflowRegressionTest extends TestCase
         Proposal::factory()->create(['title' => 'Laravel other user', 'status' => 'approved'])->tags()->attach($tag);
         Proposal::factory()->create(['user_id' => $speaker->id, 'title' => 'Laravel wrong status', 'status' => 'pending'])->tags()->attach($tag);
         Proposal::factory()->create(['user_id' => $speaker->id, 'title' => 'Laravel wrong tag', 'status' => 'approved']);
-        config(['scout.driver' => 'algolia', 'scout.algolia.id' => 'test-application-id']);
+        config(['scout.driver' => 'algolia', 'scout.algolia.id' => 'TESTAPP123', 'scout.algolia.secret' => 'test-admin-key']);
         $engine = Mockery::mock(Engine::class);
         $engine->shouldReceive('paginate')->once()->andThrow(new UnreachableException);
         app(EngineManager::class)->extend('algolia', fn () => $engine);
@@ -227,7 +227,7 @@ class WorkflowRegressionTest extends TestCase
         $tag = Tag::factory()->create();
         $proposal = Proposal::factory()->create(['user_id' => $speaker->id, 'title' => 'Laravel match', 'status' => 'approved']);
         $proposal->tags()->attach($tag);
-        config(['scout.driver' => 'algolia', 'scout.algolia.id' => 'test-application-id']);
+        config(['scout.driver' => 'algolia', 'scout.algolia.id' => 'TESTAPP123', 'scout.algolia.secret' => 'test-admin-key']);
         $engine = Mockery::mock(Engine::class);
         $engine->shouldReceive('paginate')->once()->withArgs(function ($builder, $perPage, $page) use ($speaker, $tag): bool {
             return $perPage === 1 && $page === 1

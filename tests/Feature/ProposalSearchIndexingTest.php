@@ -36,7 +36,7 @@ class ProposalSearchIndexingTest extends TestCase
         config([
             'queue.default' => 'database',
             'scout.driver' => 'algolia',
-            'scout.algolia.id' => 'test-application-id',
+            'scout.algolia.id' => 'TESTAPP123',
             'scout.algolia.secret' => 'test-admin-key',
         ]);
     }
@@ -78,6 +78,20 @@ class ProposalSearchIndexingTest extends TestCase
 
         $this->assertDatabaseHas('proposals', ['id' => $proposal->id, 'user_id' => $speaker->id]);
         Storage::disk('public')->assertExists($proposal->file_path);
+    }
+
+    public function test_deleted_proposals_do_not_leave_failed_custom_indexing_jobs(): void
+    {
+        Proposal::withoutSyncingToSearch(function (): void {
+            $proposal = Proposal::factory()->create();
+            IndexProposalJob::dispatch($proposal);
+            $proposal->delete();
+        });
+
+        $this->assertSame(1, DB::table('jobs')->count());
+        $this->artisan('queue:work', ['--stop-when-empty' => true, '--sleep' => 0])->assertSuccessful();
+        $this->assertSame(0, DB::table('jobs')->count());
+        $this->assertSame(0, DB::table('failed_jobs')->count());
     }
 
     public function test_indexing_is_queued_only_after_the_outer_transaction_commits(): void

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\ProposalStatus;
+use App\Helpers\AlgoliaConfiguration;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -303,14 +304,23 @@ class Proposal extends Model
 
         // If driver is 'algolia', check if credentials are configured
         if ($driver === 'algolia') {
-            $appId = config('scout.algolia.id', '');
-            $secret = config('scout.algolia.secret', '');
-
-            return !empty($appId) && !empty($secret);
+            return AlgoliaConfiguration::isConfigured();
         }
 
         // For other drivers (meilisearch, typesense), allow syncing
         // They will handle their own configuration errors
         return true;
+    }
+
+    // Eligibility is configuration-only, not a per-proposal visibility rule.
+    // Scout otherwise enqueues removal jobs even when indexing is disabled.
+    public function wasSearchableBeforeUpdate(): bool
+    {
+        return $this->shouldBeSearchable();
+    }
+
+    public function wasSearchableBeforeDelete(): bool
+    {
+        return $this->shouldBeSearchable();
     }
 }

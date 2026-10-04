@@ -10,6 +10,7 @@ use App\Constants\PaginationConstants;
 use App\Enums\ProposalStatus;
 use App\Events\ProposalSubmitted;
 use App\Exceptions\ProposalFileNotFoundException;
+use App\Helpers\AlgoliaConfiguration;
 use App\Helpers\ApiResponse;
 use App\Helpers\CacheHelper;
 use App\Http\Requests\IndexProposalRequest;
@@ -218,7 +219,7 @@ class ProposalController extends Controller
             $validated = $request->validated();
             $perPage = isset($validated['per_page']) ? (int) $validated['per_page'] : PaginationConstants::DEFAULT_PER_PAGE;
             $searchQuery = $validated['search'] ?? null;
-            $useScout = $searchQuery !== null && config('scout.driver') === 'algolia' && !empty(config('scout.algolia.id'));
+            $useScout = $searchQuery !== null && config('scout.driver') === 'algolia' && AlgoliaConfiguration::isConfigured();
 
             // Use Scout for full-text search if available and search query is provided
             if ($useScout) {

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Helpers\AlgoliaConfiguration;
 use App\Models\Proposal;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
@@ -33,49 +34,63 @@ class ImportProposalsToScout extends Command
         $driver = config('scout.driver');
 
         if ($driver !== 'algolia') {
-            $this->error('Scout driver is set to "'.$driver.'". Please configure Algolia first.');
+            $this->error('Algolia is not active. Please configure Algolia first.');
             $this->info('Set SCOUT_DRIVER=algolia in your .env file and configure ALGOLIA_APP_ID and ALGOLIA_SECRET.');
 
             return Command::FAILURE;
         }
 
-        if (empty(config('scout.algolia.id')) || empty(config('scout.algolia.secret'))) {
-            $this->error('Algolia credentials are not configured.');
+        if (! AlgoliaConfiguration::isConfigured()) {
+            $this->error('Algolia credentials are missing, placeholders, or malformed.');
             $this->info('Please set ALGOLIA_APP_ID and ALGOLIA_SECRET in your .env file.');
 
             return Command::FAILURE;
         }
 
-        $this->info('Starting proposal import to Algolia...');
+        if (! config('scout.queue') || config('queue.default') === 'sync') {
+            $this->error('Use SCOUT_QUEUE=true and an asynchronous queue connection for Algolia.');
 
-        $chunkSize = (int) $this->option('chunk');
+            return Command::FAILURE;
+        }
+
+        $chunkSize = filter_var($this->option('chunk'), FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        if ($chunkSize === false) {
+            $this->error('Chunk size must be a positive integer.');
+
+            return Command::FAILURE;
+        }
+
+        $this->info('Queueing proposal indexing for Algolia...');
+
         $total = Proposal::count();
-        $imported = 0;
+        $queued = 0;
+        $failed = 0;
 
         $this->info("Found {$total} proposals to import.");
 
         Proposal::with(['user', 'tags'])
-            ->chunk($chunkSize, function ($proposals) use (&$imported, $total) {
+            ->chunk($chunkSize, function ($proposals) use (&$queued, &$failed, $total) {
                 foreach ($proposals as $proposal) {
                     try {
                         $proposal->searchable();
-                        $imported++;
+                        $queued++;
 
-                        if ($imported % 50 === 0) {
-                            $this->info("Imported {$imported}/{$total} proposals...");
+                        if ($queued % 50 === 0) {
+                            $this->info("Queued {$queued}/{$total} proposals...");
                         }
                     } catch (\Exception $e) {
-                        $this->warn("Failed to import proposal ID {$proposal->id}: {$e->getMessage()}");
+                        $failed++;
+                        $this->warn("Failed to queue proposal ID {$proposal->id}.");
                         Log::error('Failed to import proposal to Scout', [
                             'proposal_id' => $proposal->id,
-                            'error' => $e->getMessage(),
+                            'exception_type' => $e::class,
                         ]);
                     }
                 }
             });
 
-        $this->info("Successfully imported {$imported}/{$total} proposals to the search index.");
+        $this->info("Queued {$queued}/{$total} proposals for indexing. Keep the queue worker running and check failed jobs.");
 
-        return Command::SUCCESS;
+        return $failed > 0 ? Command::FAILURE : Command::SUCCESS;
     }
 }
