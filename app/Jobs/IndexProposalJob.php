@@ -13,7 +13,7 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Job to index a proposal in Algolia asynchronously.
+ * Job to index a proposal in the active Scout engine asynchronously.
  *
  * This job handles Laravel Scout indexing in the background
  * to avoid blocking HTTP requests.
@@ -72,7 +72,7 @@ class IndexProposalJob implements ShouldQueue
         } catch (\Exception $e) {
             Log::error('Failed to index proposal', [
                 'proposal_id' => $this->proposal->id,
-                'error' => $e->getMessage(),
+                'exception_type' => $e::class,
             ]);
 
             // Let the worker retry and eventually record a failed job.
@@ -87,7 +87,7 @@ class IndexProposalJob implements ShouldQueue
     {
         Log::error('IndexProposalJob failed permanently', [
             'proposal_id' => $this->proposal->id,
-            'error' => $exception->getMessage(),
+            'exception_type' => $exception::class,
         ]);
     }
 }

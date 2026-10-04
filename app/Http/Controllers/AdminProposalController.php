@@ -14,9 +14,9 @@ use App\Http\Requests\IndexAdminProposalRequest;
 use App\Http\Requests\UpdateProposalStatusRequest;
 use App\Http\Resources\ProposalResource;
 use App\Models\Proposal;
+use App\Services\ProposalSearchService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use OpenApi\Attributes as OA;
@@ -122,16 +122,7 @@ class AdminProposalController extends Controller
         try {
             $validated = $request->validated();
             $perPage = $validated['per_page'] ?? PaginationConstants::DEFAULT_PER_PAGE;
-            $searchQuery = $validated['search'] ?? null;
-            $useScout = $searchQuery !== null && config('scout.driver') === 'algolia' && !empty(config('scout.algolia.id'));
-
-            // Use Scout for full-text search if available and search query is provided
-            if ($useScout) {
-                $proposals = $this->searchWithScout($request, $searchQuery, $perPage);
-            } else {
-                // Fallback to database search
-                $proposals = $this->searchWithDatabase($request, $perPage);
-            }
+            $proposals = app(ProposalSearchService::class)->paginate($request->user(), $validated, (int) $perPage);
 
             return ApiResponse::success(
                 'Proposals retrieved successfully',
@@ -152,117 +143,6 @@ class AdminProposalController extends Controller
 
             return ApiResponse::error('Failed to retrieve proposals', 500);
         }
-    }
-
-    /**
-     * Search proposals using Laravel Scout (Algolia) for admin.
-     */
-    private function searchWithScout(IndexAdminProposalRequest $request, string $searchQuery, int $perPage): LengthAwarePaginator
-    {
-        $validated = $request->validated();
-        
-        // Build Algolia filters
-        $filters = [];
-
-        // Filter by status
-        if (isset($validated['status'])) {
-            $status = $validated['status'];
-            if (in_array($status, ProposalStatus::values(), true)) {
-                $filters[] = 'status:'.$status;
-            }
-        }
-
-        // Filter by user
-        if (isset($validated['user_id'])) {
-            $filters[] = 'user_id:'.$validated['user_id'];
-        }
-
-        // Filter by tags
-        if (isset($validated['tags']) && is_array($validated['tags'])) {
-            $tagIds = array_map('intval', array_filter($validated['tags']));
-            if (count($tagIds) > 0) {
-                // Algolia filter for array contains any
-                $tagFilters = array_map(fn ($id) => 'tag_ids:'.$id, $tagIds);
-                $filters[] = '('.implode(' OR ', $tagFilters).')';
-            }
-        }
-
-        // Perform Scout search with filters
-        $searchResults = Proposal::search($searchQuery)
-            ->when(count($filters) > 0, function ($search) use ($filters) {
-                return $search->whereRaw(implode(' AND ', $filters));
-            })
-            ->paginate($perPage);
-
-        // Get the actual models from search results
-        $proposalIds = $searchResults->map(fn ($result) => $result->id)->toArray();
-
-        if (empty($proposalIds)) {
-            // Return empty paginator if no results
-            return new LengthAwarePaginator(
-                collect([]),
-                0,
-                $perPage,
-                1,
-                ['path' => $request->url(), 'query' => $request->query()]
-            );
-        }
-
-        // Load relationships and maintain search order
-        $proposals = Proposal::with(['user', 'tags', 'reviews'])
-            ->whereIn('id', $proposalIds)
-            ->get()
-            ->sortBy(fn ($proposal) => array_search($proposal->id, $proposalIds))
-            ->values();
-
-        // Create a paginator manually to maintain Scout's pagination info
-        $currentPage = $searchResults->currentPage();
-        $total = $searchResults->total();
-
-        return new LengthAwarePaginator(
-            $proposals,
-            $total,
-            $perPage,
-            $currentPage,
-            ['path' => $request->url(), 'query' => $request->query()]
-        );
-    }
-
-    /**
-     * Search proposals using database queries (fallback) for admin.
-     */
-    private function searchWithDatabase(IndexAdminProposalRequest $request, int $perPage): LengthAwarePaginator
-    {
-        $validated = $request->validated();
-        $query = Proposal::with(['user', 'tags', 'reviews']);
-
-        // Search by title (fallback to LIKE query)
-        if (isset($validated['search'])) {
-            $query->searchByTitle($validated['search']);
-        }
-
-        // Filter by tags
-        if (isset($validated['tags']) && is_array($validated['tags'])) {
-            $tagIds = array_map('intval', array_filter($validated['tags']));
-            if (count($tagIds) > 0) {
-                $query->byTags($tagIds);
-            }
-        }
-
-        // Filter by status
-        if (isset($validated['status'])) {
-            $status = $validated['status'];
-            if (in_array($status, ProposalStatus::values(), true)) {
-                $query->byStatus($status);
-            }
-        }
-
-        // Filter by user
-        if (isset($validated['user_id'])) {
-            $query->byUser($validated['user_id']);
-        }
-
-        return $query->latest()->paginate($perPage);
     }
 
     /**

@@ -4,6 +4,7 @@
 
 - Laravel 12 API on PHP 8.2+ with Sanctum, Scout, broadcasting/Pusher, PHPUnit 11, and Pint.
 - Implements authentication, role-aware proposal and review workflows, file downloads, search, and realtime events.
+- Database title search is the default; optional Algolia or Elasticsearch 8 search uses Scout. See `ELASTICSEARCH_SETUP.md` for engine switching and the loopback-only local `compose.search.yml` service.
 
 ## Commands
 
@@ -11,6 +12,7 @@
 - Development: `composer dev`
 - Focused test: `php artisan test --filter <TestName>`
 - Full tests: `composer test`
+- Optional live Elasticsearch tests: `php artisan test tests/Integration/ElasticsearchIntegrationTest.php` (requires the local search service; isolated test DB and disposable indices).
 - Format check: `vendor/bin/pint --test`
 
 ## Architecture and Boundaries

@@ -64,11 +64,11 @@ The Laravel framework is open-sourced software licensed under the [MIT license](
 Scout indexes proposal creates, updates, status changes, and deletes on the
 queue after database transactions commit. Review ratings and tag-only edits
 use `IndexProposalJob`, which indexes directly on the worker and retries failures.
-An Algolia outage must not prevent a proposal and its attachment from being saved.
+An Algolia or Elasticsearch outage must not prevent a proposal and its attachment from being saved.
 The old submitted/status indexing listener classes remain available for any jobs
 already queued before deployment, but are no longer registered for new events.
 
-When using Algolia, keep `SCOUT_QUEUE=true` and use an asynchronous connection
+When using Algolia or Elasticsearch, keep `SCOUT_QUEUE=true` and use an asynchronous connection
 such as `QUEUE_CONNECTION=database`, not `sync`. Scout waits for commits by default;
 rolled-back proposals are not indexed. Do not disable queuing with an external
 search engine, as that puts network calls back into HTTP requests.
@@ -103,6 +103,14 @@ its output reports queued work, not completed indexing. See
 [SCOUT_SEARCH_SETUP.md](SCOUT_SEARCH_SETUP.md) for the full workflow.
 Custom indexing jobs for proposals deleted before the worker runs are discarded
 instead of retried as failures.
+
+## Optional Elasticsearch alternative
+
+Elasticsearch 8 is available through `SCOUT_DRIVER=elastic`; local database search
+remains the default. The same proposal/reviewer/admin endpoints preserve their
+permissions and filters for all engines. See [Elasticsearch setup](ELASTICSEARCH_SETUP.md)
+for the optional loopback-only Docker service, safe mapping setup, verification,
+queue/import workflow, authenticated remote configuration, and engine switching.
 
 ## Proposal workflow guarantees
 

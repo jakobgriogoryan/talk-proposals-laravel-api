@@ -9,6 +9,8 @@ use App\Models\Proposal;
 use App\Models\Review;
 use App\Policies\ProposalPolicy;
 use App\Policies\ReviewPolicy;
+use App\Search\ProposalSearchParametersFactory;
+use Elastic\ScoutDriver\Factories\SearchParametersFactoryInterface;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 use Illuminate\Support\Facades\Config;
 
@@ -32,7 +34,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(SearchParametersFactoryInterface::class, ProposalSearchParametersFactory::class);
     }
 
     /**

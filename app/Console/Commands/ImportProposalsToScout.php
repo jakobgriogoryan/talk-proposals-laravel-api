@@ -24,7 +24,7 @@ class ImportProposalsToScout extends Command
      *
      * @var string
      */
-    protected $description = 'Import all existing proposals into the search index (Algolia)';
+    protected $description = 'Queue existing proposals into the active Algolia or Elasticsearch index';
 
     /**
      * Execute the console command.
@@ -33,14 +33,14 @@ class ImportProposalsToScout extends Command
     {
         $driver = config('scout.driver');
 
-        if ($driver !== 'algolia') {
-            $this->error('Algolia is not active. Please configure Algolia first.');
-            $this->info('Set SCOUT_DRIVER=algolia in your .env file and configure ALGOLIA_APP_ID and ALGOLIA_SECRET.');
+        if (! in_array($driver, ['algolia', 'elastic'], true)) {
+            $this->error('A remote search engine is not active. Configure Algolia or Elasticsearch first.');
+            $this->info('Set SCOUT_DRIVER=algolia or SCOUT_DRIVER=elastic in .env after configuring the engine.');
 
             return Command::FAILURE;
         }
 
-        if (! AlgoliaConfiguration::isConfigured()) {
+        if ($driver === 'algolia' && ! AlgoliaConfiguration::isConfigured()) {
             $this->error('Algolia credentials are missing, placeholders, or malformed.');
             $this->info('Please set ALGOLIA_APP_ID and ALGOLIA_SECRET in your .env file.');
 
@@ -48,7 +48,7 @@ class ImportProposalsToScout extends Command
         }
 
         if (! config('scout.queue') || config('queue.default') === 'sync') {
-            $this->error('Use SCOUT_QUEUE=true and an asynchronous queue connection for Algolia.');
+            $this->error('Use SCOUT_QUEUE=true and an asynchronous queue connection for remote search.');
 
             return Command::FAILURE;
         }
@@ -60,7 +60,7 @@ class ImportProposalsToScout extends Command
             return Command::FAILURE;
         }
 
-        $this->info('Queueing proposal indexing for Algolia...');
+        $this->info("Queueing proposal indexing for {$driver}...");
 
         $total = Proposal::count();
         $queued = 0;
