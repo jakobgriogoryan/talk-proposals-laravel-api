@@ -13,6 +13,7 @@ use App\Http\Requests\IndexReviewRequest;
 use App\Http\Requests\StoreReviewRequest;
 use App\Http\Requests\UpdateReviewRequest;
 use App\Http\Resources\ReviewResource;
+use App\Jobs\IndexProposalJob;
 use App\Models\Proposal;
 use App\Models\Review;
 use Illuminate\Http\JsonResponse;
@@ -257,7 +258,6 @@ class ReviewController extends Controller
 
             // Invalidate caches related to proposals (reviews affect top-rated)
             CacheHelper::forgetProposalRelated($proposal->id);
-            CacheHelper::forgetTopRated(10); // Invalidate top-rated cache
 
             // Broadcast proposal reviewed event (for real-time updates and background jobs)
             // Event listeners will handle: notifications and indexing
@@ -436,7 +436,7 @@ class ReviewController extends Controller
 
             // Invalidate caches related to proposals (reviews affect top-rated)
             CacheHelper::forgetProposalRelated($review->proposal_id);
-            CacheHelper::forgetTopRated(10); // Invalidate top-rated cache
+            IndexProposalJob::dispatch($proposal);
 
             return ApiResponse::success(
                 'Review updated successfully',

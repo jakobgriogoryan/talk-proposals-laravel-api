@@ -15,6 +15,14 @@ use Illuminate\Foundation\Http\FormRequest;
  */
 class UpdateProposalRequest extends FormRequest
 {
+    protected function prepareForValidation(): void
+    {
+        // Preserve an explicit empty list from multipart proposal edits.
+        if ($this->input('tags') === '[]') {
+            $this->merge(['tags' => []]);
+        }
+    }
+
     /**
      * Determine if the user is authorized to make this request.
      */

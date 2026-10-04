@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Helpers\CacheHelper;
 use App\Models\Proposal;
 use App\Services\FileUploadService;
 use Illuminate\Bus\Queueable;
@@ -15,7 +16,7 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Job to process proposal file upload asynchronously.
- * 
+ *
  * This job handles domain-level validation and storage of proposal files
  * in the background to avoid blocking the HTTP request.
  */
@@ -33,6 +34,8 @@ class ProcessProposalFileJob implements ShouldQueue
      */
     public int $backoff = 5;
 
+    public bool $deleteWhenMissingModels = true;
+
     /**
      * Create a new job instance.
      */
@@ -41,7 +44,7 @@ class ProcessProposalFileJob implements ShouldQueue
         public string $filePath,
         public int $userId
     ) {
-        //
+        $this->afterCommit();
     }
 
     /**
@@ -49,15 +52,20 @@ class ProcessProposalFileJob implements ShouldQueue
      */
     public function handle(FileUploadService $fileUploadService): void
     {
+        $currentProposal = Proposal::find($this->proposal->id);
+        if (! $currentProposal || $currentProposal->file_path !== $this->filePath) {
+            return;
+        }
+
         try {
             // The file has already been stored by the controller
             // This job performs domain-level validation (PDF structure, quota)
             // Note: File is already in storage, so we validate the stored file
-            
+
             // Get the file from storage
             $disk = \Illuminate\Support\Facades\Storage::disk(\App\Constants\FileConstants::PROPOSAL_STORAGE_DISK);
-            
-            if (!$disk->exists($this->filePath)) {
+
+            if (! $disk->exists($this->filePath)) {
                 throw new \RuntimeException("File not found at path: {$this->filePath}");
             }
 
@@ -73,13 +81,8 @@ class ProcessProposalFileJob implements ShouldQueue
             );
 
             // Perform domain-level validation
-            $fileUploadService->validateDomainRules($file, $this->userId);
-
-            // If validation passes, the file is already stored and valid
-            // Update proposal to mark file as processed
-            $this->proposal->update([
-                'file_path' => $this->filePath,
-            ]);
+            // The stored attachment is already included in the user's usage.
+            $fileUploadService->validateDomainRules($file, $currentProposal->user_id, $this->filePath);
 
             Log::info('Proposal file processed successfully', [
                 'proposal_id' => $this->proposal->id,
@@ -92,17 +95,9 @@ class ProcessProposalFileJob implements ShouldQueue
                 'error' => $e->getMessage(),
             ]);
 
-            // Clean up the file if validation fails
-            try {
-                $disk = \Illuminate\Support\Facades\Storage::disk(\App\Constants\FileConstants::PROPOSAL_STORAGE_DISK);
-                if ($disk->exists($this->filePath)) {
-                    $disk->delete($this->filePath);
-                }
-            } catch (\Exception $cleanupException) {
-                Log::warning('Failed to cleanup file after job failure', [
-                    'file_path' => $this->filePath,
-                    'error' => $cleanupException->getMessage(),
-                ]);
+            if ($e instanceof \InvalidArgumentException) {
+                $this->discardRejectedFile();
+                $this->fail($e);
             }
 
             throw $e;
@@ -120,11 +115,21 @@ class ProcessProposalFileJob implements ShouldQueue
             'error' => $exception->getMessage(),
         ]);
 
-        // Clean up the file on permanent failure
+        // Transient processing failures must not delete valid attachments.
+        if ($exception instanceof \InvalidArgumentException) {
+            $this->discardRejectedFile();
+        }
+    }
+
+    private function discardRejectedFile(): void
+    {
         try {
-            $disk = \Illuminate\Support\Facades\Storage::disk(\App\Constants\FileConstants::PROPOSAL_STORAGE_DISK);
-            if ($disk->exists($this->filePath)) {
-                $disk->delete($this->filePath);
+            $cleared = Proposal::whereKey($this->proposal->id)
+                ->where('file_path', $this->filePath)
+                ->update(['file_path' => null]);
+            if ($cleared) {
+                CacheHelper::forgetProposal($this->proposal->id);
+                \Illuminate\Support\Facades\Storage::disk(\App\Constants\FileConstants::PROPOSAL_STORAGE_DISK)->delete($this->filePath);
             }
         } catch (\Exception $cleanupException) {
             Log::warning('Failed to cleanup file after permanent job failure', [
@@ -134,4 +139,3 @@ class ProcessProposalFileJob implements ShouldQueue
         }
     }
 }
-

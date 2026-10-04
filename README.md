@@ -91,3 +91,13 @@ with `php artisan queue:retry <job-id>`; inspect them with `php artisan queue:fa
 To rebuild a stale index after fixing connectivity, use
 `php artisan scout:import 'App\Models\Proposal'`. For local development without Algolia, use
 `SCOUT_DRIVER=collection` instead.
+
+## Proposal workflow guarantees
+
+- Attachment replacements validate PDF structure and the proposal owner's quota before changing the record. The old file is removed after commit; a rollback removes only the new upload.
+- File-processing jobs ignore superseded attachments. Validation rejections clear the matching record and its cache; temporary processing failures retain the file for retry. Stored files are not counted twice against quota.
+- Editing review ratings queues a search-index refresh without sending a new-review notification. Proposal changes invalidate every supported top-rated limit (1–50).
+- Algolia filters use Scout's search options. Algolia failures fall back to database **title** search with the same speaker ownership, status, tags, and pagination constraints; unrelated exceptions are not masked by this fallback.
+- Multipart updates can send `tags=\"[]\"` (the literal string `[]`) to remove every tag. An absent field leaves tags unchanged; nonempty arrays continue to use `tags[]`.
+
+Regression coverage: `php artisan test --filter='WorkflowRegressionTest|ProcessProposalFileJobTest'`.

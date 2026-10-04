@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Helpers;
 
+use App\Constants\PaginationConstants;
 use Illuminate\Support\Facades\Cache;
 
 /**
@@ -15,16 +16,22 @@ final class CacheHelper
      * Cache key prefixes.
      */
     private const PREFIX_TAGS = 'tags';
+
     private const PREFIX_TOP_RATED = 'top_rated_proposals';
+
     private const PREFIX_USER = 'user';
+
     private const PREFIX_PROPOSAL = 'proposal';
 
     /**
      * Cache TTL in seconds.
      */
     private const TTL_TAGS = 3600; // 1 hour
+
     private const TTL_TOP_RATED = 900; // 15 minutes
+
     private const TTL_USER = 300; // 5 minutes
+
     private const TTL_PROPOSAL = 1800; // 30 minutes
 
     /**
@@ -117,9 +124,15 @@ final class CacheHelper
     /**
      * Invalidate top-rated proposals cache.
      */
-    public static function forgetTopRated(int $limit = 10): void
+    public static function forgetTopRated(?int $limit = null): void
     {
-        Cache::forget(self::topRatedKey($limit));
+        if ($limit !== null) {
+            Cache::forget(self::topRatedKey($limit));
+
+            return;
+        }
+
+        Cache::deleteMultiple(array_map(self::topRatedKey(...), range(1, PaginationConstants::MAX_TOP_RATED_LIMIT)));
     }
 
     /**
@@ -145,8 +158,7 @@ final class CacheHelper
     {
         self::forgetProposal($proposalId);
         // Invalidate top-rated cache when a proposal changes
-        self::forgetTopRated(10);
-        // You might want to invalidate other limits if they exist
+        self::forgetTopRated();
     }
 
     /**
@@ -156,7 +168,6 @@ final class CacheHelper
     {
         self::forgetUser($userId);
         // Invalidate top-rated cache as user's proposals might affect rankings
-        self::forgetTopRated(10);
+        self::forgetTopRated();
     }
 }
-

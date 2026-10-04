@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use Algolia\AlgoliaSearch\Exceptions\AlgoliaException;
 use App\Constants\FileConstants;
 use App\Constants\PaginationConstants;
 use App\Enums\ProposalStatus;
@@ -221,7 +222,14 @@ class ProposalController extends Controller
 
             // Use Scout for full-text search if available and search query is provided
             if ($useScout) {
-                $proposals = $this->searchWithScout($request, $searchQuery, $perPage);
+                try {
+                    $proposals = $this->searchWithScout($request, $searchQuery, $perPage);
+                } catch (AlgoliaException $exception) {
+                    Log::warning('Algolia search unavailable; using database title search', [
+                        'exception_type' => $exception::class,
+                    ]);
+                    $proposals = $this->searchWithDatabase($request, $perPage);
+                }
             } else {
                 // Fallback to database search
                 $proposals = $this->searchWithDatabase($request, $perPage);
@@ -282,7 +290,7 @@ class ProposalController extends Controller
         // Perform Scout search with filters
         $searchResults = Proposal::search($searchQuery)
             ->when(count($filters) > 0, function ($search) use ($filters) {
-                return $search->whereRaw(implode(' AND ', $filters));
+                return $search->options(['filters' => implode(' AND ', $filters)]);
             })
             ->paginate($perPage);
 
@@ -762,8 +770,12 @@ class ProposalController extends Controller
     )]
     public function update(UpdateProposalRequest $request, Proposal $proposal): JsonResponse
     {
+        $newFilePath = null;
+        $committed = false;
+        $transactionLevel = DB::transactionLevel();
         try {
             DB::beginTransaction();
+            $proposal = Proposal::query()->lockForUpdate()->findOrFail($proposal->id);
 
             $validated = $request->validated();
             $data = [];
@@ -780,19 +792,18 @@ class ProposalController extends Controller
             // File is already validated by UpdateProposalRequest
             $fileChanged = false;
             if ($request->hasFile('file')) {
-                // Delete old file
-                if ($proposal->file_path) {
-                    $fileUploadService = app(FileUploadService::class);
-                    $fileUploadService->deleteFile($proposal->file_path);
-                }
-
+                $oldFilePath = $proposal->file_path;
                 $file = $request->file('file');
-                // Store file immediately (request-level validation already passed)
-                // Domain-level validation will happen in background job
-                $newFilePath = $file->store(FileConstants::PROPOSAL_STORAGE_PATH, FileConstants::PROPOSAL_STORAGE_DISK);
+                $newFilePath = app(FileUploadService::class)->storeAndValidateDomain($file, $proposal->user_id, $oldFilePath);
 
-                if (!$newFilePath) {
-                    throw new \RuntimeException('Failed to store file');
+                if ($oldFilePath) {
+                    DB::afterCommit(function () use ($oldFilePath): void {
+                        try {
+                            app(FileUploadService::class)->deleteFile($oldFilePath);
+                        } catch (\Exception $exception) {
+                            Log::warning('Unable to clean up replaced proposal file', ['file_path' => $oldFilePath]);
+                        }
+                    });
                 }
 
                 $data['file_path'] = $newFilePath;
@@ -821,6 +832,7 @@ class ProposalController extends Controller
             $proposal->load(['user', 'tags']);
 
             DB::commit();
+            $committed = true;
 
             // Invalidate caches related to proposals
             CacheHelper::forgetProposalRelated($proposal->id);
@@ -833,7 +845,7 @@ class ProposalController extends Controller
             // Dispatch background jobs
             if ($fileChanged && isset($newFilePath)) {
                 // Process file in background (domain-level validation)
-                ProcessProposalFileJob::dispatch($proposal, $newFilePath, $request->user()->id);
+                ProcessProposalFileJob::dispatch($proposal, $newFilePath, $proposal->user_id);
             }
 
             // Scout handles model saves; tag-only edits do not fire a saved event.
@@ -846,7 +858,22 @@ class ProposalController extends Controller
                 ['proposal' => new ProposalResource($proposal)]
             );
         } catch (\Exception $e) {
-            DB::rollBack();
+            // After-commit callbacks can fail after the database write is durable.
+            $committed = $committed || DB::transactionLevel() === $transactionLevel;
+            if (! $committed) {
+                DB::rollBack();
+            }
+
+            if (! $committed && $newFilePath) {
+                try {
+                    app(FileUploadService::class)->deleteFile($newFilePath);
+                } catch (\Exception $cleanupException) {
+                    Log::warning('Unable to clean up failed proposal replacement', ['file_path' => $newFilePath]);
+                }
+            }
+            if ($e instanceof \InvalidArgumentException) {
+                return ApiResponse::error($e->getMessage(), 422);
+            }
 
             $this->logError('Error updating proposal', $e, $request, [
                 'proposal_id' => $proposal->id,
