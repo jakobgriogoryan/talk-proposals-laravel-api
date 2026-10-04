@@ -69,7 +69,7 @@ class ImportProposalsToScout extends Command
         $this->info("Found {$total} proposals to import.");
 
         Proposal::with(['user', 'tags'])
-            ->chunk($chunkSize, function ($proposals) use (&$queued, &$failed, $total) {
+            ->chunkById($chunkSize, function ($proposals) use (&$queued, &$failed, $total) {
                 foreach ($proposals as $proposal) {
                     try {
                         $proposal->searchable();

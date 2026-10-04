@@ -70,7 +70,7 @@ class DatabaseSeeder extends Seeder
                     $tags->push($newTag);
                 } catch (\Illuminate\Database\QueryException $e) {
                     // Ignore duplicate errors and continue
-                    if (!str_contains($e->getMessage(), 'Duplicate entry')) {
+                    if (! str_contains($e->getMessage(), 'Duplicate entry')) {
                         throw $e;
                     }
                 }
@@ -85,6 +85,7 @@ class DatabaseSeeder extends Seeder
 
         if ($proposalsNeeded > 0 && $speakers->isNotEmpty()) {
             $newProposals = Proposal::factory()
+                ->withSampleAttachment()
                 ->count($proposalsNeeded)
                 ->create([
                     'user_id' => fn () => $speakers->random()->id,

@@ -26,7 +26,10 @@ class ElasticsearchProposalIndex
         'updated_at' => ['type' => 'date'],
     ];
 
-    public function __construct(private ClientBuilderInterface $builder) {}
+    public function __construct(
+        private readonly ClientBuilderInterface $builder,
+        private readonly ProposalSearchParametersFactory $parametersFactory,
+    ) {}
 
     public function name(): string
     {
@@ -63,7 +66,7 @@ class ElasticsearchProposalIndex
         $client = $this->builder->default();
         $this->checkVersion($client->info()->asArray());
         $this->checkMappings($name, $client->indices()->getMapping(['index' => $name])->asArray());
-        $parameters = app(ProposalSearchParametersFactory::class)->makeFromBuilder(
+        $parameters = $this->parametersFactory->makeFromBuilder(
             Proposal::search('connection check')->where('user_id', -1)->where('status', 'pending')->whereIn('tag_ids', [-1])
         )->toArray();
         $parameters['body']['size'] = 0;
@@ -84,8 +87,10 @@ class ElasticsearchProposalIndex
     {
         $properties = $mappings[$name]['mappings']['properties'] ?? [];
         foreach (self::PROPERTIES as $field => $definition) {
-            if (($properties[$field]['type'] ?? null) !== $definition['type']) {
-                throw new SearchSetupException('Proposal index mappings are missing or incompatible. Use a new SCOUT_PREFIX, run scout:setup-elastic, then import. Existing data was not changed.');
+            foreach ($definition as $option => $expectedValue) {
+                if (($properties[$field][$option] ?? null) !== $expectedValue) {
+                    throw new SearchSetupException('Proposal index mappings are missing or incompatible. Use a new SCOUT_PREFIX, run scout:setup-elastic, then import. Existing data was not changed.');
+                }
             }
         }
     }

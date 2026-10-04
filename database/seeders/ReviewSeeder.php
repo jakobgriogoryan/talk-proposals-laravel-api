@@ -23,7 +23,7 @@ class ReviewSeeder extends Seeder
     {
         // Get all reviewers
         $reviewers = User::where('role', UserRole::REVIEWER->value)->get();
-        
+
         if ($reviewers->isEmpty()) {
             $this->command->warn('No reviewers found. Creating 3 reviewers...');
             $reviewers = User::factory()->count(3)->create([
@@ -33,18 +33,19 @@ class ReviewSeeder extends Seeder
 
         // Get all proposals
         $proposals = Proposal::all();
-        
+
         if ($proposals->isEmpty()) {
             $this->command->warn('No proposals found. Creating 10 proposals...');
             $speakers = User::where('role', UserRole::SPEAKER->value)->get();
-            
+
             if ($speakers->isEmpty()) {
                 $speakers = User::factory()->count(5)->create([
                     'role' => UserRole::SPEAKER->value,
                 ]);
             }
-            
+
             $proposals = Proposal::factory()
+                ->withSampleAttachment()
                 ->count(10)
                 ->create([
                     'user_id' => fn () => $speakers->random()->id,
@@ -60,7 +61,7 @@ class ReviewSeeder extends Seeder
             $existingReviewerIds = Review::where('proposal_id', $proposal->id)
                 ->pluck('reviewer_id')
                 ->toArray();
-            
+
             $availableReviewers = $reviewers->reject(function ($reviewer) use ($existingReviewerIds) {
                 return in_array($reviewer->id, $existingReviewerIds, true);
             });
@@ -87,4 +88,3 @@ class ReviewSeeder extends Seeder
         $this->command->info("Created {$reviewCount} reviews for {$proposals->count()} proposals.");
     }
 }
-

@@ -16,105 +16,105 @@ use App\Http\Resources\ProposalResource;
 use App\Models\Proposal;
 use App\Services\ProposalSearchService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use OpenApi\Attributes as OA;
 
 /**
  * Controller for admin proposal management.
  */
-#[OA\Tag(name: "Admin")]
+#[OA\Tag(name: 'Admin')]
 class AdminProposalController extends Controller
 {
+    public function __construct(private readonly ProposalSearchService $search) {}
+
     /**
      * Display a listing of all proposals for admin.
      */
     #[OA\Get(
-        path: "/admin/proposals",
-        description: "Retrieves all proposals with filtering options. Only accessible by admin users. Includes additional filters like user_id.",
-        summary: "List all proposals (Admin only)",
-        security: [["sanctum" => []]],
-        tags: ["Admin"],
+        path: '/admin/proposals',
+        description: 'Retrieves all proposals with filtering options. Only accessible by admin users. Includes additional filters like user_id.',
+        summary: 'List all proposals (Admin only)',
+        security: [['sanctum' => []]],
+        tags: ['Admin'],
         parameters: [
             new OA\Parameter(
-                name: "search",
-                description: "Search proposals by title",
-                in: "query",
+                name: 'search',
+                description: 'Search proposals by title',
+                in: 'query',
                 required: false,
-                schema: new OA\Schema(type: "string", example: "Laravel")
+                schema: new OA\Schema(type: 'string', example: 'Laravel')
             ),
             new OA\Parameter(
-                name: "tags",
-                description: "Filter by tag IDs (comma-separated)",
-                in: "query",
+                name: 'tags',
+                description: 'Filter by tag IDs (comma-separated)',
+                in: 'query',
                 required: false,
-                schema: new OA\Schema(type: "string", example: "1,2,3")
+                schema: new OA\Schema(type: 'string', example: '1,2,3')
             ),
             new OA\Parameter(
-                name: "status",
-                description: "Filter by status",
-                in: "query",
+                name: 'status',
+                description: 'Filter by status',
+                in: 'query',
                 required: false,
-                schema: new OA\Schema(type: "string", enum: ["pending", "approved", "rejected"], example: "pending")
+                schema: new OA\Schema(type: 'string', enum: ['pending', 'approved', 'rejected'], example: 'pending')
             ),
             new OA\Parameter(
-                name: "user_id",
-                description: "Filter by user ID",
-                in: "query",
+                name: 'user_id',
+                description: 'Filter by user ID',
+                in: 'query',
                 required: false,
-                schema: new OA\Schema(type: "integer", example: 1)
+                schema: new OA\Schema(type: 'integer', example: 1)
             ),
             new OA\Parameter(
-                name: "page",
-                description: "Page number",
-                in: "query",
+                name: 'page',
+                description: 'Page number',
+                in: 'query',
                 required: false,
-                schema: new OA\Schema(type: "integer", example: 1)
+                schema: new OA\Schema(type: 'integer', example: 1)
             ),
             new OA\Parameter(
-                name: "per_page",
-                description: "Items per page",
-                in: "query",
+                name: 'per_page',
+                description: 'Items per page',
+                in: 'query',
                 required: false,
-                schema: new OA\Schema(type: "integer", example: 15)
+                schema: new OA\Schema(type: 'integer', example: 15)
             ),
         ],
         responses: [
             new OA\Response(
                 response: 200,
-                description: "Proposals retrieved successfully",
+                description: 'Proposals retrieved successfully',
                 content: new OA\JsonContent(
                     properties: [
-                        new OA\Property(property: "status", type: "string", example: "success"),
-                        new OA\Property(property: "message", type: "string", example: "Proposals retrieved successfully"),
+                        new OA\Property(property: 'status', type: 'string', example: 'success'),
+                        new OA\Property(property: 'message', type: 'string', example: 'Proposals retrieved successfully'),
                         new OA\Property(
-                            property: "data",
+                            property: 'data',
                             properties: [
                                 new OA\Property(
-                                    property: "proposals",
-                                    type: "array",
-                                    items: new OA\Items(ref: "#/components/schemas/Proposal")
+                                    property: 'proposals',
+                                    type: 'array',
+                                    items: new OA\Items(ref: '#/components/schemas/Proposal')
                                 ),
                                 new OA\Property(
-                                    property: "pagination",
+                                    property: 'pagination',
                                     properties: [
-                                        new OA\Property(property: "current_page", type: "integer", example: 1),
-                                        new OA\Property(property: "last_page", type: "integer", example: 5),
-                                        new OA\Property(property: "per_page", type: "integer", example: 15),
-                                        new OA\Property(property: "total", type: "integer", example: 75),
+                                        new OA\Property(property: 'current_page', type: 'integer', example: 1),
+                                        new OA\Property(property: 'last_page', type: 'integer', example: 5),
+                                        new OA\Property(property: 'per_page', type: 'integer', example: 15),
+                                        new OA\Property(property: 'total', type: 'integer', example: 75),
                                     ],
-                                    type: "object"
+                                    type: 'object'
                                 ),
                             ],
-                            type: "object"
+                            type: 'object'
                         ),
                     ]
                 )
             ),
-            new OA\Response(response: 401, description: "Unauthenticated"),
-            new OA\Response(response: 403, description: "Forbidden - Admin only"),
-            new OA\Response(response: 500, description: "Server error"),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 403, description: 'Forbidden - Admin only'),
+            new OA\Response(response: 500, description: 'Server error'),
         ]
     )]
     public function index(IndexAdminProposalRequest $request): JsonResponse
@@ -122,7 +122,7 @@ class AdminProposalController extends Controller
         try {
             $validated = $request->validated();
             $perPage = $validated['per_page'] ?? PaginationConstants::DEFAULT_PER_PAGE;
-            $proposals = app(ProposalSearchService::class)->paginate($request->user(), $validated, (int) $perPage);
+            $proposals = $this->search->paginate($request->user(), $validated, (int) $perPage);
 
             return ApiResponse::success(
                 'Proposals retrieved successfully',
@@ -149,52 +149,52 @@ class AdminProposalController extends Controller
      * Update the proposal status.
      */
     #[OA\Patch(
-        path: "/admin/proposals/{id}/status",
-        description: "Updates the status of a proposal. Only accessible by admin users. Triggers real-time broadcast event.",
-        summary: "Update proposal status (Admin only)",
-        security: [["sanctum" => []]],
+        path: '/admin/proposals/{id}/status',
+        description: 'Updates the status of a proposal. Only accessible by admin users. Triggers real-time broadcast event.',
+        summary: 'Update proposal status (Admin only)',
+        security: [['sanctum' => []]],
         requestBody: new OA\RequestBody(
             required: true,
             content: new OA\JsonContent(
-                required: ["status"],
+                required: ['status'],
                 properties: [
-                    new OA\Property(property: "status", type: "string", enum: ["pending", "approved", "rejected"], example: "approved", description: "New proposal status"),
+                    new OA\Property(property: 'status', type: 'string', enum: ['pending', 'approved', 'rejected'], example: 'approved', description: 'New proposal status'),
                 ]
             )
         ),
-        tags: ["Admin"],
+        tags: ['Admin'],
         parameters: [
             new OA\Parameter(
-                name: "id",
-                description: "Proposal ID",
-                in: "path",
+                name: 'id',
+                description: 'Proposal ID',
+                in: 'path',
                 required: true,
-                schema: new OA\Schema(type: "integer", example: 1)
+                schema: new OA\Schema(type: 'integer', example: 1)
             ),
         ],
         responses: [
             new OA\Response(
                 response: 200,
-                description: "Proposal status updated successfully",
+                description: 'Proposal status updated successfully',
                 content: new OA\JsonContent(
                     properties: [
-                        new OA\Property(property: "status", type: "string", example: "success"),
-                        new OA\Property(property: "message", type: "string", example: "Proposal status updated successfully"),
+                        new OA\Property(property: 'status', type: 'string', example: 'success'),
+                        new OA\Property(property: 'message', type: 'string', example: 'Proposal status updated successfully'),
                         new OA\Property(
-                            property: "data",
+                            property: 'data',
                             properties: [
-                                new OA\Property(property: "proposal", ref: "#/components/schemas/Proposal"),
+                                new OA\Property(property: 'proposal', ref: '#/components/schemas/Proposal'),
                             ],
-                            type: "object"
+                            type: 'object'
                         ),
                     ]
                 )
             ),
-            new OA\Response(response: 401, description: "Unauthenticated"),
-            new OA\Response(response: 403, description: "Forbidden - Admin only"),
-            new OA\Response(response: 404, description: "Proposal not found"),
-            new OA\Response(response: 422, description: "Validation error"),
-            new OA\Response(response: 500, description: "Server error"),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 403, description: 'Forbidden - Admin only'),
+            new OA\Response(response: 404, description: 'Proposal not found'),
+            new OA\Response(response: 422, description: 'Validation error'),
+            new OA\Response(response: 500, description: 'Server error'),
         ]
     )]
     public function updateStatus(UpdateProposalStatusRequest $request, Proposal $proposal): JsonResponse

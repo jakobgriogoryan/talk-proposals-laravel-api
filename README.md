@@ -121,3 +121,26 @@ queue/import workflow, authenticated remote configuration, and engine switching.
 - Multipart updates can send `tags=\"[]\"` (the literal string `[]`) to remove every tag. An absent field leaves tags unchanged; nonempty arrays continue to use `tags[]`.
 
 Regression coverage: `php artisan test --filter='WorkflowRegressionTest|ProcessProposalFileJobTest'`.
+
+## Downloadable demo attachments
+
+The default proposal factory leaves the optional attachment empty. Local/testing
+seeders use `Proposal::factory()->withSampleAttachment()` to copy the valid
+`database/fixtures/test.pdf` into a unique storage path for each new dummy proposal.
+No PDF-generation package is required at runtime. Removing one attachment does
+not remove another proposal's file.
+
+For an existing local database with the old factory's nonexistent UUID PDF paths:
+
+```sh
+php artisan db:seed --class=SampleProposalFilesSeeder
+```
+
+This idempotent repair only fills missing `proposals/<UUID>.pdf` placeholder
+files; it neither changes database records nor overwrites existing files. It does
+not attach PDFs to proposals with no attachment, replace missing real uploads, or
+run outside `local`/`testing`. Do not use `migrate:fresh` to repair attachments.
+Downloads still pass through the authenticated, policy-protected API endpoint.
+
+See [original task review](TASK_SPEC_REVIEW.md) for requirement mapping and the
+intentional restriction on administrator self-registration.

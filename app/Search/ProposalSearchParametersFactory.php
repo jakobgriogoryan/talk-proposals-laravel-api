@@ -7,6 +7,7 @@ namespace App\Search;
 use Elastic\Adapter\Search\SearchParameters;
 use Elastic\ScoutDriver\Factories\SearchParametersFactory;
 use Laravel\Scout\Builder;
+use stdClass;
 
 class ProposalSearchParametersFactory extends SearchParametersFactory
 {
@@ -17,14 +18,15 @@ class ProposalSearchParametersFactory extends SearchParametersFactory
 
     protected function makeQuery(Builder $builder): array
     {
-        $query = parent::makeQuery($builder);
-        if (trim($builder->query) !== '') {
-            // Treat user input as text, never Lucene syntax or field selectors.
-            $query['bool']['must'] = ['multi_match' => [
-                'query' => $builder->query,
-                'fields' => ['title^3', 'description', 'tags', 'user_name'],
-                'type' => 'best_fields',
-            ]];
+        // Build plain-text queries directly, without constructing Lucene syntax.
+        $must = trim($builder->query) === '' ? ['match_all' => new stdClass] : ['multi_match' => [
+            'query' => $builder->query,
+            'fields' => ['title^3', 'description', 'tags', 'user_name'],
+            'type' => 'best_fields',
+        ]];
+        $query = ['bool' => ['must' => $must]];
+        if ($filter = $this->makeFilter($builder)) {
+            $query['bool']['filter'] = $filter;
         }
 
         return $query;

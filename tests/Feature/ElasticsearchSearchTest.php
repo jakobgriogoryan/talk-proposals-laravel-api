@@ -8,6 +8,7 @@ use App\Models\Proposal;
 use App\Models\Tag;
 use App\Models\User;
 use App\Search\ElasticsearchProposalIndex;
+use App\Search\ProposalSearchParametersFactory;
 use Elastic\Client\ClientBuilderInterface;
 use Elastic\Elasticsearch\ClientBuilder;
 use GuzzleHttp\Psr7\Response;
@@ -233,6 +234,48 @@ class ElasticsearchSearchTest extends TestCase
         });
         $this->artisan('scout:check-elastic')->expectsOutputToContain('verified (read-only)')
             ->expectsOutputToContain('does not verify write permissions')->assertSuccessful();
+    }
+
+    public function test_blank_query_uses_match_all_and_preserves_native_filters(): void
+    {
+        $parameters = app(ProposalSearchParametersFactory::class)->makeFromBuilder(
+            Proposal::search('   ')->where('status', 'pending')
+        )->toArray();
+        $this->assertInstanceOf(\stdClass::class, $parameters['body']['query']['bool']['must']['match_all']);
+        $this->assertSame([['term' => ['status' => 'pending']]], $parameters['body']['query']['bool']['filter']);
+        $this->assertTrue($parameters['body']['track_total_hits']);
+        $this->assertFalse($parameters['body']['_source']);
+    }
+
+    public function test_setup_rejects_an_index_that_makes_email_searchable(): void
+    {
+        $properties = ElasticsearchProposalIndex::PROPERTIES;
+        $properties['user_email']['index'] = true;
+        $this->useHttp(fn (RequestInterface $request) => match ($request->getMethod().' '.$request->getUri()->getPath()) {
+            'GET /' => $this->elasticResponse(['version' => ['number' => '8.19.22']]),
+            'HEAD /test_proposals' => new Response(200, ['X-Elastic-Product' => 'Elasticsearch']),
+            'GET /test_proposals/_mapping' => $this->elasticResponse(['test_proposals' => ['mappings' => ['properties' => $properties]]]),
+            default => throw new RuntimeException('Must not change an existing index'),
+        });
+        $this->artisan('scout:setup-elastic')->expectsOutputToContain('Existing data was not changed')->assertFailed();
+    }
+
+    public function test_import_does_not_skip_next_chunk_when_an_earlier_row_is_deleted(): void
+    {
+        $proposals = Proposal::factory()->count(4)->create();
+        $firstId = $proposals[0]->id;
+        $secondId = $proposals[1]->id;
+        Proposal::retrieved(function (Proposal $proposal) use ($firstId, $secondId): void {
+            if ($proposal->id === $secondId) {
+                Proposal::whereKey($firstId)->delete();
+            }
+        });
+        Queue::fake();
+        $this->artisan('scout:import-proposals', ['--chunk' => 2])->assertSuccessful();
+        Queue::assertPushed(MakeSearchable::class, 4);
+        foreach ($proposals->slice(2) as $proposal) {
+            Queue::assertPushed(MakeSearchable::class, fn ($job) => $job->models->first()->id === $proposal->id);
+        }
     }
 
     public function test_wrong_server_major_and_invalid_prefix_fail_without_claiming_readiness(): void
