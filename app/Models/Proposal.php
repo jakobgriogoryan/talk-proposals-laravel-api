@@ -247,7 +247,7 @@ class Proposal extends Model
     public function toSearchableArray(): array
     {
         // Load relationships if not already loaded
-        $this->loadMissing(['user', 'tags']);
+        $this->loadMissing(['user', 'tags', 'reviews']);
 
         // Calculate average rating and reviews count
         $avgRating = $this->getAverageRating();

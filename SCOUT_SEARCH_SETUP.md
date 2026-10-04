@@ -24,11 +24,14 @@ SCOUT_DRIVER=algolia
 ALGOLIA_APP_ID=your_application_id_here
 ALGOLIA_SECRET=your_admin_api_key_here
 SCOUT_PREFIX=talk_proposals_
-SCOUT_QUEUE=false
+SCOUT_QUEUE=true
+QUEUE_CONNECTION=database
 ```
 
 **Note:** 
-- `SCOUT_QUEUE=false` means proposals will be indexed synchronously. Set to `true` if you want async indexing (requires queue worker).
+- Keep `SCOUT_QUEUE=true` with an asynchronous queue connection when using Algolia.
+  Scout indexes only after database commits, so failed indexing cannot roll back proposal saving.
+  Rolled-back changes are never indexed. Do not use the `sync` queue connection with Algolia.
 - `SCOUT_PREFIX` is optional but recommended to avoid conflicts if you have multiple applications.
 
 ### 3. Clear Configuration Cache
@@ -130,12 +133,20 @@ Proposals are automatically indexed when:
 - A new proposal is created
 - A proposal is updated
 - Tags are added/removed from a proposal
+- A proposal status changes or a proposal is deleted
+- Reviews change the proposal's rating
 
-**Note:** If you're using queues (`SCOUT_QUEUE=true`), make sure your queue worker is running:
+**Note:** Indexing is queued and eventually consistent. Keep a worker running with retries:
 
 ```bash
-php artisan queue:work
+php artisan queue:work --tries=3 --backoff=5 --timeout=60
 ```
+
+Scout handles model saves and deletes. Review ratings and tag-only edits use
+`IndexProposalJob`. There is no second submitted/status indexing listener.
+Algolia failures are retried and then recorded in `failed_jobs`; they do not
+delete committed proposals or attachments. Fix Algolia credentials/connectivity
+before retrying a failed indexing job with `php artisan queue:retry <job-id>`.
 
 ## 🛠️ Manual Indexing
 
@@ -202,4 +213,3 @@ After setup, verify everything works:
 2. Test search: `GET /api/proposals?search=test`
 3. Check Algolia dashboard for indexed records
 4. Verify search results are relevant and fast
-

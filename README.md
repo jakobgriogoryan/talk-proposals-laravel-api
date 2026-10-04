@@ -58,3 +58,36 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
 # talk-proposals-api
+
+## Search indexing and proposal creation
+
+Scout indexes proposal creates, updates, status changes, and deletes on the
+queue after database transactions commit. Review ratings and tag-only edits
+use `IndexProposalJob`, which indexes directly on the worker and retries failures.
+An Algolia outage must not prevent a proposal and its attachment from being saved.
+The old submitted/status indexing listener classes remain available for any jobs
+already queued before deployment, but are no longer registered for new events.
+
+When using Algolia, keep `SCOUT_QUEUE=true` and use an asynchronous connection
+such as `QUEUE_CONNECTION=database`, not `sync`. Scout waits for commits by default;
+rolled-back proposals are not indexed. Do not disable queuing with an external
+search engine, as that puts network calls back into HTTP requests.
+
+After changing configuration or deploying these changes:
+
+```sh
+php artisan config:clear
+php artisan event:clear
+php artisan queue:restart
+php artisan queue:work --tries=3 --backoff=5 --timeout=60
+```
+
+Keep the worker running in a separate terminal or under a process supervisor.
+The retry options apply to Scout's native jobs; the review/tag indexing job also
+has three attempts and a five-second backoff. Indexing is eventually consistent.
+If Algolia credentials/connectivity remain invalid, jobs will fail independently
+of proposal saving. Correct the Algolia configuration before retrying failed jobs
+with `php artisan queue:retry <job-id>`; inspect them with `php artisan queue:failed`.
+To rebuild a stale index after fixing connectivity, use
+`php artisan scout:import 'App\Models\Proposal'`. For local development without Algolia, use
+`SCOUT_DRIVER=collection` instead.

@@ -452,7 +452,7 @@ class ProposalController extends Controller
             CacheHelper::forgetUserRelated($request->user()->id);
 
             // Broadcast proposal submitted event (for real-time updates and background jobs)
-            // Event listeners will handle: file processing, indexing, and notifications
+            // Scout handles indexing; event listeners process files and notifications.
             event(new ProposalSubmitted($proposal, $filePath, $request->user()->id));
 
             return ApiResponse::success(
@@ -836,8 +836,8 @@ class ProposalController extends Controller
                 ProcessProposalFileJob::dispatch($proposal, $newFilePath, $request->user()->id);
             }
 
-            // Index proposal in Algolia asynchronously (if proposal data changed)
-            if (count($data) > 0 || isset($validated['tags'])) {
+            // Scout handles model saves; tag-only edits do not fire a saved event.
+            if (count($data) === 0 && isset($validated['tags'])) {
                 IndexProposalJob::dispatch($proposal);
             }
 

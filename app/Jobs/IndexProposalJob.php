@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Job to index a proposal in Algolia asynchronously.
- * 
+ *
  * This job handles Laravel Scout indexing in the background
  * to avoid blocking HTTP requests.
  */
@@ -38,7 +38,7 @@ class IndexProposalJob implements ShouldQueue
     public function __construct(
         public Proposal $proposal
     ) {
-        //
+        $this->afterCommit();
     }
 
     /**
@@ -48,10 +48,11 @@ class IndexProposalJob implements ShouldQueue
     {
         try {
             // Only index if Scout is properly configured
-            if (!$this->proposal->shouldBeSearchable()) {
+            if (! $this->proposal->shouldBeSearchable()) {
                 Log::debug('Proposal not searchable, skipping index', [
                     'proposal_id' => $this->proposal->id,
                 ]);
+
                 return;
             }
 
@@ -60,7 +61,8 @@ class IndexProposalJob implements ShouldQueue
             $this->proposal->loadMissing(['user', 'tags']);
 
             // Index the proposal using Scout
-            $this->proposal->searchable();
+            // This job already runs on a worker; do not enqueue another Scout job.
+            $this->proposal->searchableSync();
 
             Log::info('Proposal indexed successfully', [
                 'proposal_id' => $this->proposal->id,
@@ -71,8 +73,8 @@ class IndexProposalJob implements ShouldQueue
                 'error' => $e->getMessage(),
             ]);
 
-            // Don't throw - indexing failures shouldn't break the application
-            // The job will retry automatically
+            // Let the worker retry and eventually record a failed job.
+            throw $e;
         }
     }
 
@@ -87,4 +89,3 @@ class IndexProposalJob implements ShouldQueue
         ]);
     }
 }
-
