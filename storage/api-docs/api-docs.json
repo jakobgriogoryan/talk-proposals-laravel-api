@@ -3,9 +3,6 @@
     "info": {
         "title": "Talk Proposals API",
         "description": "API documentation for the Talk Proposals system. This API allows speakers to submit talk proposals, reviewers to review them, and admins to manage the proposal status.",
-        "contact": {
-            "email": "support@talkproposals.test"
-        },
         "license": {
             "name": "MIT"
         },
@@ -13,15 +10,7 @@
     },
     "servers": [
         {
-            "url": "http://api.talkproposals.test/api",
-            "description": "Local Development Server"
-        },
-        {
-            "url": "http://localhost:8000/api",
-            "description": "Local Development Server (Alternative)"
-        },
-        {
-            "url": "http://api.talkproposals.test"
+            "url": "/api"
         }
     ],
     "paths": {
@@ -41,6 +30,7 @@
                         "required": false,
                         "schema": {
                             "type": "string",
+                            "maxLength": 255,
                             "example": "Laravel"
                         }
                     },
@@ -50,8 +40,20 @@
                         "description": "Filter by tag IDs (comma-separated)",
                         "required": false,
                         "schema": {
-                            "type": "string",
-                            "example": "1,2,3"
+                            "example": "1,2,3",
+                            "oneOf": [
+                                {
+                                    "type": "string",
+                                    "example": "1,2,3"
+                                },
+                                {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "integer",
+                                        "minimum": 1
+                                    }
+                                }
+                            ]
                         }
                     },
                     {
@@ -76,6 +78,7 @@
                         "required": false,
                         "schema": {
                             "type": "integer",
+                            "minimum": 1,
                             "example": 1
                         }
                     },
@@ -86,6 +89,8 @@
                         "required": false,
                         "schema": {
                             "type": "integer",
+                            "default": 1,
+                            "minimum": 1,
                             "example": 1
                         }
                     },
@@ -96,6 +101,9 @@
                         "required": false,
                         "schema": {
                             "type": "integer",
+                            "default": 15,
+                            "maximum": 100,
+                            "minimum": 1,
                             "example": 15
                         }
                     }
@@ -161,11 +169,17 @@
                     },
                     "500": {
                         "description": "Server error"
+                    },
+                    "422": {
+                        "description": "Invalid query parameters"
                     }
                 },
                 "security": [
                     {
                         "sanctum": []
+                    },
+                    {
+                        "bearerAuth": []
                     }
                 ]
             }
@@ -258,11 +272,17 @@
                     },
                     "500": {
                         "description": "Server error"
+                    },
+                    "419": {
+                        "description": "Missing or expired CSRF token for stateful SPA requests"
                     }
                 },
                 "security": [
                     {
                         "sanctum": []
+                    },
+                    {
+                        "bearerAuth": []
                     }
                 ]
             }
@@ -315,8 +335,8 @@
                                         "description": "User role (speaker or reviewer)",
                                         "type": "string",
                                         "enum": [
-                                            "speaker",
-                                            "reviewer"
+                                            "reviewer",
+                                            "speaker"
                                         ],
                                         "example": "speaker"
                                     }
@@ -360,6 +380,12 @@
                     },
                     "500": {
                         "description": "Server error"
+                    },
+                    "419": {
+                        "description": "Missing or expired CSRF token for stateful SPA requests"
+                    },
+                    "429": {
+                        "description": "Too many requests"
                     }
                 }
             }
@@ -437,6 +463,15 @@
                     },
                     "500": {
                         "description": "Server error"
+                    },
+                    "419": {
+                        "description": "Missing or expired CSRF token for stateful SPA requests"
+                    },
+                    "422": {
+                        "description": "Invalid request data"
+                    },
+                    "429": {
+                        "description": "Too many requests"
                     }
                 }
             }
@@ -488,6 +523,9 @@
                 "security": [
                     {
                         "sanctum": []
+                    },
+                    {
+                        "bearerAuth": []
                     }
                 ]
             }
@@ -523,11 +561,87 @@
                     },
                     "500": {
                         "description": "Server error"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "419": {
+                        "description": "Missing or expired CSRF token for stateful SPA requests"
                     }
                 },
                 "security": [
                     {
                         "sanctum": []
+                    },
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/broadcasting/auth": {
+            "post": {
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Authorize a private realtime channel",
+                "operationId": "9fbe8064bacc11cca15350b88b9116c7",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "socket_id",
+                                    "channel_name"
+                                ],
+                                "properties": {
+                                    "socket_id": {
+                                        "type": "string",
+                                        "example": "123.456"
+                                    },
+                                    "channel_name": {
+                                        "type": "string",
+                                        "example": "private-user.1"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Channel authorized",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "auth": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "403": {
+                        "description": "Channel access denied"
+                    },
+                    "419": {
+                        "description": "Missing or expired CSRF token for stateful SPA requests"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    },
+                    {
+                        "bearerAuth": []
                     }
                 ]
             }
@@ -537,17 +651,18 @@
                 "tags": [
                     "Reviews"
                 ],
-                "summary": "List all proposals for review (Reviewer only)",
-                "description": "Retrieves all proposals for reviewers to review. Only accessible by reviewer users. Supports full-text search (using Laravel Scout with Algolia) across title, description, tags, and author name. Also supports filtering by tags and status.",
+                "summary": "List all proposals for review (Reviewer or Admin)",
+                "description": "Lists proposals for reviewers and admins. Database title search is the default and remote-outage fallback. Optional Algolia or Elasticsearch enables configured full-text search. Ownership, tags, status, and pagination constraints apply to every engine.",
                 "operationId": "1bed2c6b88bd971d3349d4fc565eb917",
                 "parameters": [
                     {
                         "name": "search",
                         "in": "query",
-                        "description": "Full-text search across proposal title, description, tags, and author name. Uses Laravel Scout with Algolia for advanced search capabilities when configured.",
+                        "description": "Database title search by default and on remote outages. Configured Algolia or Elasticsearch provides full-text search across title, description, tags, and author name.",
                         "required": false,
                         "schema": {
                             "type": "string",
+                            "maxLength": 255,
                             "example": "Laravel framework"
                         }
                     },
@@ -557,8 +672,20 @@
                         "description": "Filter by tag IDs (comma-separated or array)",
                         "required": false,
                         "schema": {
-                            "type": "string",
-                            "example": "1,2,3"
+                            "example": "1,2,3",
+                            "oneOf": [
+                                {
+                                    "type": "string",
+                                    "example": "1,2,3"
+                                },
+                                {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "integer",
+                                        "minimum": 1
+                                    }
+                                }
+                            ]
                         }
                     },
                     {
@@ -583,6 +710,8 @@
                         "required": false,
                         "schema": {
                             "type": "integer",
+                            "default": 1,
+                            "minimum": 1,
                             "example": 1
                         }
                     },
@@ -593,6 +722,9 @@
                         "required": false,
                         "schema": {
                             "type": "integer",
+                            "default": 15,
+                            "maximum": 100,
+                            "minimum": 1,
                             "example": 15
                         }
                     }
@@ -654,15 +786,21 @@
                         "description": "Unauthenticated"
                     },
                     "403": {
-                        "description": "Forbidden - Reviewer only"
+                        "description": "Forbidden - Reviewer or Admin required"
                     },
                     "500": {
                         "description": "Server error"
+                    },
+                    "422": {
+                        "description": "Invalid query parameters"
                     }
                 },
                 "security": [
                     {
                         "sanctum": []
+                    },
+                    {
+                        "bearerAuth": []
                     }
                 ]
             }
@@ -673,7 +811,7 @@
                     "Proposals"
                 ],
                 "summary": "List proposals",
-                "description": "Retrieves a paginated list of proposals. Speakers see only their own proposals, while reviewers and admins see all proposals. Supports full-text search (using Laravel Scout with Algolia) across title, description, tags, and author name. Also supports filtering by tags and status.",
+                "description": "Lists proposals with ownership, tags, status, and pagination constraints. Speakers see their own proposals; reviewers and admins see all. Database title search is the default and remote-outage fallback; configured Algolia or Elasticsearch enables full-text search.",
                 "operationId": "d7921395a1b3aa095baa799106226e94",
                 "parameters": [
                     {
@@ -683,6 +821,7 @@
                         "required": false,
                         "schema": {
                             "type": "string",
+                            "maxLength": 255,
                             "example": "Laravel"
                         }
                     },
@@ -692,8 +831,20 @@
                         "description": "Filter by tag IDs (comma-separated or array)",
                         "required": false,
                         "schema": {
-                            "type": "string",
-                            "example": "1,2,3"
+                            "example": "1,2,3",
+                            "oneOf": [
+                                {
+                                    "type": "string",
+                                    "example": "1,2,3"
+                                },
+                                {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "integer",
+                                        "minimum": 1
+                                    }
+                                }
+                            ]
                         }
                     },
                     {
@@ -718,6 +869,8 @@
                         "required": false,
                         "schema": {
                             "type": "integer",
+                            "default": 1,
+                            "minimum": 1,
                             "example": 1
                         }
                     },
@@ -728,6 +881,9 @@
                         "required": false,
                         "schema": {
                             "type": "integer",
+                            "default": 15,
+                            "maximum": 100,
+                            "minimum": 1,
                             "example": 15
                         }
                     }
@@ -790,11 +946,17 @@
                     },
                     "500": {
                         "description": "Server error"
+                    },
+                    "422": {
+                        "description": "Invalid query parameters"
                     }
                 },
                 "security": [
                     {
                         "sanctum": []
+                    },
+                    {
+                        "bearerAuth": []
                     }
                 ]
             },
@@ -818,6 +980,7 @@
                                     "title": {
                                         "description": "Proposal title (required)",
                                         "type": "string",
+                                        "maxLength": 255,
                                         "example": "Introduction to Laravel"
                                     },
                                     "description": {
@@ -826,9 +989,10 @@
                                         "example": "A comprehensive guide to Laravel framework"
                                     },
                                     "file": {
-                                        "description": "PDF file (optional, max 4MB)",
+                                        "description": "Optional PDF, maximum 4 MB.",
                                         "type": "string",
-                                        "format": "binary"
+                                        "format": "binary",
+                                        "x-max-size-bytes": 4194304
                                     },
                                     "tags": {
                                         "description": "Array of tag names (optional)",
@@ -887,11 +1051,20 @@
                     },
                     "500": {
                         "description": "Server error"
+                    },
+                    "419": {
+                        "description": "Missing or expired CSRF token for stateful SPA requests"
+                    },
+                    "429": {
+                        "description": "Too many requests"
                     }
                 },
                 "security": [
                     {
                         "sanctum": []
+                    },
+                    {
+                        "bearerAuth": []
                     }
                 ]
             }
@@ -961,6 +1134,9 @@
                 "security": [
                     {
                         "sanctum": []
+                    },
+                    {
+                        "bearerAuth": []
                     }
                 ]
             },
@@ -984,42 +1160,7 @@
                     }
                 ],
                 "requestBody": {
-                    "required": false,
-                    "content": {
-                        "multipart/form-data": {
-                            "schema": {
-                                "properties": {
-                                    "title": {
-                                        "description": "Proposal title (optional)",
-                                        "type": "string",
-                                        "example": "Updated Title"
-                                    },
-                                    "description": {
-                                        "description": "Proposal description (optional)",
-                                        "type": "string",
-                                        "example": "Updated description"
-                                    },
-                                    "file": {
-                                        "description": "PDF file (optional, max 4MB)",
-                                        "type": "string",
-                                        "format": "binary"
-                                    },
-                                    "tags": {
-                                        "description": "Array of tag names (optional, empty array removes all tags)",
-                                        "type": "array",
-                                        "items": {
-                                            "type": "string"
-                                        },
-                                        "example": [
-                                            "Technology",
-                                            "Laravel"
-                                        ]
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
+                    "$ref": "#/components/requestBodies/ProposalUpdate"
                 },
                 "responses": {
                     "200": {
@@ -1064,11 +1205,20 @@
                     },
                     "500": {
                         "description": "Server error"
+                    },
+                    "419": {
+                        "description": "Missing or expired CSRF token for stateful SPA requests"
+                    },
+                    "429": {
+                        "description": "Too many requests"
                     }
                 },
                 "security": [
                     {
                         "sanctum": []
+                    },
+                    {
+                        "bearerAuth": []
                     }
                 ]
             },
@@ -1123,11 +1273,79 @@
                     },
                     "500": {
                         "description": "Server error"
+                    },
+                    "419": {
+                        "description": "Missing or expired CSRF token for stateful SPA requests"
                     }
                 },
                 "security": [
                     {
                         "sanctum": []
+                    },
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            },
+            "patch": {
+                "tags": [
+                    "Proposals"
+                ],
+                "summary": "Partially update a proposal",
+                "description": "Same validation and ownership rules as PUT. Browser multipart uploads use POST with _method=PATCH; tags=[] clears tags and omitted fields remain unchanged.",
+                "operationId": "4ceb7b86882508dda9cdc8da0bb8e80f",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "$ref": "#/components/requestBodies/ProposalUpdate"
+                },
+                "responses": {
+                    "200": {
+                        "description": "Proposal updated successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "403": {
+                        "description": "Not authorized to update this proposal"
+                    },
+                    "404": {
+                        "description": "Proposal not found"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    },
+                    "419": {
+                        "description": "Missing or expired CSRF token for stateful SPA requests"
+                    },
+                    "429": {
+                        "description": "Too many requests"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    },
+                    {
+                        "bearerAuth": []
                     }
                 ]
             }
@@ -1149,6 +1367,8 @@
                         "schema": {
                             "type": "integer",
                             "default": 10,
+                            "maximum": 50,
+                            "minimum": 1,
                             "example": 10
                         }
                     }
@@ -1190,11 +1410,17 @@
                     },
                     "500": {
                         "description": "Server error"
+                    },
+                    "422": {
+                        "description": "Invalid query parameters"
                     }
                 },
                 "security": [
                     {
                         "sanctum": []
+                    },
+                    {
+                        "bearerAuth": []
                     }
                 ]
             }
@@ -1242,6 +1468,9 @@
                 "security": [
                     {
                         "sanctum": []
+                    },
+                    {
+                        "bearerAuth": []
                     }
                 ]
             }
@@ -1306,6 +1535,9 @@
                 "security": [
                     {
                         "sanctum": []
+                    },
+                    {
+                        "bearerAuth": []
                     }
                 ]
             }
@@ -1316,7 +1548,7 @@
                     "Reviews"
                 ],
                 "summary": "Get reviews for a proposal",
-                "description": "Retrieves all reviews for a specific proposal, ordered by most recent first.",
+                "description": "Retrieves paginated reviews for a specific proposal, ordered by most recent first.",
                 "operationId": "9069365518540905ebc373cff24f514e",
                 "parameters": [
                     {
@@ -1327,6 +1559,31 @@
                         "schema": {
                             "type": "integer",
                             "example": 1
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "Page number",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 1,
+                            "minimum": 1,
+                            "example": 1
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Items per page (max 50)",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 10,
+                            "maximum": 50,
+                            "minimum": 1,
+                            "example": 10
                         }
                     }
                 ],
@@ -1352,6 +1609,27 @@
                                                     "items": {
                                                         "$ref": "#/components/schemas/Review"
                                                     }
+                                                },
+                                                "pagination": {
+                                                    "properties": {
+                                                        "current_page": {
+                                                            "type": "integer",
+                                                            "example": 1
+                                                        },
+                                                        "last_page": {
+                                                            "type": "integer",
+                                                            "example": 3
+                                                        },
+                                                        "per_page": {
+                                                            "type": "integer",
+                                                            "example": 10
+                                                        },
+                                                        "total": {
+                                                            "type": "integer",
+                                                            "example": 25
+                                                        }
+                                                    },
+                                                    "type": "object"
                                                 }
                                             },
                                             "type": "object"
@@ -1370,11 +1648,17 @@
                     },
                     "500": {
                         "description": "Server error"
+                    },
+                    "422": {
+                        "description": "Invalid query parameters"
                     }
                 },
                 "security": [
                     {
                         "sanctum": []
+                    },
+                    {
+                        "bearerAuth": []
                     }
                 ]
             },
@@ -1464,21 +1748,27 @@
                         "description": "Unauthenticated"
                     },
                     "403": {
-                        "description": "Unauthorized or duplicate review"
+                        "description": "Not authorized to create reviews"
                     },
                     "404": {
                         "description": "Proposal not found"
                     },
                     "422": {
-                        "description": "Validation error"
+                        "description": "Validation error or duplicate review"
                     },
                     "500": {
                         "description": "Server error"
+                    },
+                    "419": {
+                        "description": "Missing or expired CSRF token for stateful SPA requests"
                     }
                 },
                 "security": [
                     {
                         "sanctum": []
+                    },
+                    {
+                        "bearerAuth": []
                     }
                 ]
             }
@@ -1555,6 +1845,9 @@
                 "security": [
                     {
                         "sanctum": []
+                    },
+                    {
+                        "bearerAuth": []
                     }
                 ]
             },
@@ -1664,11 +1957,17 @@
                     },
                     "500": {
                         "description": "Server error"
+                    },
+                    "419": {
+                        "description": "Missing or expired CSRF token for stateful SPA requests"
                     }
                 },
                 "security": [
                     {
                         "sanctum": []
+                    },
+                    {
+                        "bearerAuth": []
                     }
                 ]
             }
@@ -1689,7 +1988,33 @@
                         "required": false,
                         "schema": {
                             "type": "string",
+                            "maxLength": 255,
                             "example": "Technology"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "Page number",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 1,
+                            "minimum": 1,
+                            "example": 1
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Items per page (max 100)",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 50,
+                            "maximum": 100,
+                            "minimum": 1,
+                            "example": 50
                         }
                     }
                 ],
@@ -1715,6 +2040,27 @@
                                                     "items": {
                                                         "$ref": "#/components/schemas/Tag"
                                                     }
+                                                },
+                                                "pagination": {
+                                                    "properties": {
+                                                        "current_page": {
+                                                            "type": "integer",
+                                                            "example": 1
+                                                        },
+                                                        "last_page": {
+                                                            "type": "integer",
+                                                            "example": 2
+                                                        },
+                                                        "per_page": {
+                                                            "type": "integer",
+                                                            "example": 50
+                                                        },
+                                                        "total": {
+                                                            "type": "integer",
+                                                            "example": 75
+                                                        }
+                                                    },
+                                                    "type": "object"
                                                 }
                                             },
                                             "type": "object"
@@ -1730,11 +2076,17 @@
                     },
                     "500": {
                         "description": "Server error"
+                    },
+                    "422": {
+                        "description": "Invalid query parameters"
                     }
                 },
                 "security": [
                     {
                         "sanctum": []
+                    },
+                    {
+                        "bearerAuth": []
                     }
                 ]
             },
@@ -1802,11 +2154,37 @@
                     },
                     "500": {
                         "description": "Server error"
+                    },
+                    "419": {
+                        "description": "Missing or expired CSRF token for stateful SPA requests"
                     }
                 },
                 "security": [
                     {
                         "sanctum": []
+                    },
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/sanctum/csrf-cookie": {
+            "get": {
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Initialize SPA CSRF protection",
+                "operationId": "18e242cbef958f92f437d86d46002b3f",
+                "responses": {
+                    "204": {
+                        "description": "Session and XSRF-TOKEN cookies initialized"
+                    }
+                },
+                "security": [],
+                "servers": [
+                    {
+                        "url": "/"
                     }
                 ]
             }
@@ -1832,9 +2210,9 @@
                     "role": {
                         "type": "string",
                         "enum": [
-                            "speaker",
+                            "admin",
                             "reviewer",
-                            "admin"
+                            "speaker"
                         ],
                         "example": "speaker"
                     }
@@ -1849,6 +2227,7 @@
                     },
                     "title": {
                         "type": "string",
+                        "maxLength": 255,
                         "example": "Introduction to Laravel"
                     },
                     "description": {
@@ -1876,6 +2255,13 @@
                         "type": "array",
                         "items": {
                             "$ref": "#/components/schemas/Tag"
+                        }
+                    },
+                    "reviews": {
+                        "description": "Present when reviews are loaded.",
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Review"
                         }
                     },
                     "average_rating": {
@@ -1979,12 +2365,70 @@
                 "type": "object"
             }
         },
+        "requestBodies": {
+            "ProposalUpdate": {
+                "required": false,
+                "content": {
+                    "multipart/form-data": {
+                        "schema": {
+                            "properties": {
+                                "_method": {
+                                    "description": "For browser multipart uploads, POST to the same URL with this method override.",
+                                    "type": "string",
+                                    "enum": [
+                                        "PUT",
+                                        "PATCH"
+                                    ]
+                                },
+                                "title": {
+                                    "type": "string",
+                                    "maxLength": 255
+                                },
+                                "description": {
+                                    "type": "string"
+                                },
+                                "file": {
+                                    "description": "Optional PDF, maximum 4 MB.",
+                                    "type": "string",
+                                    "format": "binary",
+                                    "nullable": true,
+                                    "x-max-size-bytes": 4194304
+                                },
+                                "tags": {
+                                    "description": "Omit to preserve tags. Use tags[] for names, or the literal [] string to clear tags in multipart requests.",
+                                    "oneOf": [
+                                        {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        {
+                                            "type": "string",
+                                            "enum": [
+                                                "[]"
+                                            ]
+                                        }
+                                    ]
+                                }
+                            },
+                            "type": "object"
+                        }
+                    }
+                }
+            }
+        },
         "securitySchemes": {
             "sanctum": {
                 "type": "apiKey",
-                "description": "Laravel Sanctum SPA authentication using session cookies. To authenticate: 1) Log in via the frontend application at http://talkproposals.test/login, 2) The session cookie will be automatically sent with requests from the same browser. Note: Swagger UI cannot manually set session cookies - you must authenticate via the frontend first.",
-                "name": "laravel_session",
+                "description": "Sanctum SPA session cookie. Fetch /sanctum/csrf-cookie before login and mutations, then send the X-XSRF-TOKEN header with cookies. The generated cookie name follows SESSION_COOKIE. Authenticate via the frontend or this API; session cookies cannot be entered manually in Swagger UI.",
+                "name": "laravel-session",
                 "in": "cookie"
+            },
+            "bearerAuth": {
+                "type": "http",
+                "description": "An existing Sanctum personal access token. Login/register use SPA sessions and do not issue bearer tokens.",
+                "scheme": "bearer"
             }
         }
     },

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Constants\PaginationConstants;
 use App\Helpers\ApiResponse;
 use App\Helpers\CacheHelper;
 use App\Http\Requests\IndexTagRequest;
@@ -93,18 +94,19 @@ class TagController extends Controller
         try {
             $validated = $request->validated();
             $search = $validated['search'] ?? null;
-            $perPage = $validated['per_page'] ?? 50;
+            $perPage = $validated['per_page'] ?? PaginationConstants::DEFAULT_TAGS_PER_PAGE;
+            $page = $validated['page'] ?? 1;
 
             // Use cache for tags list (1 hour TTL)
-            $tags = CacheHelper::rememberTags(function () use ($search, $perPage) {
+            $tags = CacheHelper::rememberTags(function () use ($search, $perPage, $page) {
                 $query = Tag::query();
 
                 if ($search !== null) {
                     $query->searchByName($search);
                 }
 
-                return $query->orderBy('name')->paginate($perPage);
-            }, $search);
+                return $query->orderBy('name')->paginate($perPage, ['*'], 'page', $page);
+            }, $search, (int) $page, (int) $perPage);
 
             return ApiResponse::success(
                 'Tags retrieved successfully',

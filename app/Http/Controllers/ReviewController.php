@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Constants\PaginationConstants;
 use App\Enums\ReviewRating;
 use App\Events\ProposalReviewed;
 use App\Exceptions\DuplicateReviewException;
@@ -16,6 +17,7 @@ use App\Http\Resources\ReviewResource;
 use App\Jobs\IndexProposalJob;
 use App\Models\Proposal;
 use App\Models\Review;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -151,7 +153,7 @@ class ReviewController extends Controller
 
         try {
             $validated = $request->validated();
-            $perPage = $validated['per_page'] ?? 10;
+            $perPage = $validated['per_page'] ?? PaginationConstants::DEFAULT_REVIEWS_PER_PAGE;
             $reviews = $proposal->reviews()->with('reviewer')->latest()->paginate($perPage);
 
             return ApiResponse::success(
@@ -222,14 +224,15 @@ class ReviewController extends Controller
                 )
             ),
             new OA\Response(response: 401, description: 'Unauthenticated'),
-            new OA\Response(response: 403, description: 'Unauthorized or duplicate review'),
+            new OA\Response(response: 403, description: 'Not authorized to create reviews'),
             new OA\Response(response: 404, description: 'Proposal not found'),
-            new OA\Response(response: 422, description: 'Validation error'),
+            new OA\Response(response: 422, description: 'Validation error or duplicate review'),
             new OA\Response(response: 500, description: 'Server error'),
         ]
     )]
     public function store(StoreReviewRequest $request, Proposal $proposal): JsonResponse
     {
+        $transactionLevel = DB::transactionLevel();
         try {
             // Check if reviewer already reviewed this proposal
             $existingReview = Review::where('proposal_id', $proposal->id)
@@ -243,12 +246,16 @@ class ReviewController extends Controller
             DB::beginTransaction();
 
             $validated = $request->validated();
-            $review = Review::create([
-                'proposal_id' => $proposal->id,
-                'reviewer_id' => $request->user()->id,
-                'rating' => $validated['rating'],
-                'comment' => $validated['comment'] ?? null,
-            ]);
+            try {
+                $review = Review::create([
+                    'proposal_id' => $proposal->id,
+                    'reviewer_id' => $request->user()->id,
+                    'rating' => $validated['rating'],
+                    'comment' => $validated['comment'] ?? null,
+                ]);
+            } catch (UniqueConstraintViolationException $e) {
+                throw new DuplicateReviewException;
+            }
 
             $review->load('reviewer');
             $proposal->refresh()->load('user');
@@ -268,6 +275,10 @@ class ReviewController extends Controller
                 201
             );
         } catch (DuplicateReviewException $e) {
+            if (DB::transactionLevel() > $transactionLevel) {
+                DB::rollBack($transactionLevel);
+            }
+
             return ApiResponse::error($e->getMessage(), $e->getCode());
         } catch (\Exception $e) {
             DB::rollBack();
@@ -424,10 +435,7 @@ class ReviewController extends Controller
             DB::beginTransaction();
 
             $validated = $request->validated();
-            $review->update([
-                'rating' => $validated['rating'],
-                'comment' => $validated['comment'] ?? null,
-            ]);
+            $review->update($validated);
 
             $review->load('reviewer');
 

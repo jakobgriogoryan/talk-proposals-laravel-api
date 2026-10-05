@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Requests;
 
+use App\Constants\PaginationConstants;
+use App\Constants\ValidationConstants;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -32,7 +34,7 @@ class IndexTagRequest extends FormRequest
                 'sometimes',
                 'nullable',
                 'string',
-                'max:255',
+                'max:'.ValidationConstants::MAX_SEARCH_LENGTH,
             ],
             'page' => [
                 'sometimes',
@@ -45,7 +47,7 @@ class IndexTagRequest extends FormRequest
                 'nullable',
                 'integer',
                 'min:1',
-                'max:100', // Max 100 per page for tags
+                'max:'.PaginationConstants::MAX_PER_PAGE,
             ],
         ];
     }
@@ -59,12 +61,12 @@ class IndexTagRequest extends FormRequest
     {
         return [
             'search.string' => 'The search query must be a valid string.',
-            'search.max' => 'The search query cannot exceed 255 characters.',
+            'search.max' => 'The search query cannot exceed '.ValidationConstants::MAX_SEARCH_LENGTH.' characters.',
             'page.integer' => 'The page number must be an integer.',
             'page.min' => 'The page number must be at least 1.',
             'per_page.integer' => 'Items per page must be an integer.',
             'per_page.min' => 'Items per page must be at least 1.',
-            'per_page.max' => 'Items per page cannot exceed 100.',
+            'per_page.max' => 'Items per page cannot exceed '.PaginationConstants::MAX_PER_PAGE.'.',
         ];
     }
 }

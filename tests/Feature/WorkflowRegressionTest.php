@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use Algolia\AlgoliaSearch\Exceptions\UnreachableException;
+use App\Events\ProposalSubmitted;
 use App\Helpers\CacheHelper;
 use App\Jobs\IndexProposalJob;
 use App\Jobs\ProcessProposalFileJob;
@@ -17,6 +18,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Scout\EngineManager;
@@ -34,6 +36,67 @@ class WorkflowRegressionTest extends TestCase
         parent::setUp();
         Queue::fake();
         Storage::fake('public');
+    }
+
+    public function test_creation_event_failure_preserves_committed_attachment_and_returns_created(): void
+    {
+        Event::listen(ProposalSubmitted::class, fn () => throw new RuntimeException('Post-commit event failure'));
+        $user = User::factory()->create(['role' => 'speaker']);
+
+        $response = $this->actingAs($user, 'sanctum')->postJson('/api/proposals', [
+            'title' => 'Committed proposal',
+            'description' => 'Creation must remain successful after the database commit.',
+            'file' => UploadedFile::fake()->createWithContent('attachment.pdf', '%PDF-1.4 attachment'),
+        ])->assertCreated();
+
+        $proposal = Proposal::findOrFail($response->json('data.proposal.id'));
+        $this->assertSame(1, Proposal::count());
+        Storage::disk('public')->assertExists($proposal->file_path);
+    }
+
+    public function test_creation_after_commit_callback_failure_preserves_attachment(): void
+    {
+        Proposal::creating(function (): void {
+            DB::afterCommit(fn () => throw new RuntimeException('Post-commit callback failure'));
+        });
+        $user = User::factory()->create(['role' => 'speaker']);
+
+        $this->actingAs($user, 'sanctum')->postJson('/api/proposals', [
+            'title' => 'Committed proposal',
+            'description' => 'A callback failure must not remove the durable upload.',
+            'file' => UploadedFile::fake()->createWithContent('attachment.pdf', '%PDF-1.4 attachment'),
+        ])->assertCreated();
+
+        Storage::disk('public')->assertExists(Proposal::sole()->file_path);
+    }
+
+    public function test_failed_creation_rolls_back_record_and_cleans_upload(): void
+    {
+        Proposal::creating(fn () => throw new RuntimeException('Database write failed'));
+        $user = User::factory()->create(['role' => 'speaker']);
+
+        $this->actingAs($user, 'sanctum')->postJson('/api/proposals', [
+            'title' => 'Failed proposal',
+            'description' => 'Pre-commit failure must remove its temporary upload.',
+            'file' => UploadedFile::fake()->createWithContent('attachment.pdf', '%PDF-1.4 attachment'),
+        ])->assertStatus(500);
+
+        $this->assertSame(0, Proposal::count());
+        $this->assertSame([], Storage::disk('public')->allFiles('proposals'));
+    }
+
+    public function test_invalid_argument_after_commit_does_not_report_creation_as_validation_failure(): void
+    {
+        Event::listen(ProposalSubmitted::class, fn () => throw new \InvalidArgumentException('Listener failed'));
+        $user = User::factory()->create(['role' => 'speaker']);
+
+        $this->actingAs($user, 'sanctum')->postJson('/api/proposals', [
+            'title' => 'Committed proposal',
+            'description' => 'Post-commit exceptions are not request validation failures.',
+            'file' => UploadedFile::fake()->createWithContent('attachment.pdf', '%PDF-1.4 attachment'),
+        ])->assertCreated();
+
+        Storage::disk('public')->assertExists(Proposal::sole()->file_path);
     }
 
     public function test_failed_file_replacement_preserves_original_and_removes_temporary_upload(): void

@@ -16,6 +16,39 @@ class TagTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_cached_tag_pages_and_page_sizes_remain_independent(): void
+    {
+        $user = User::factory()->create();
+        foreach (range(1, 25) as $number) {
+            Tag::factory()->create(['name' => sprintf('Tag %02d', $number)]);
+        }
+        $this->actingAs($user, 'sanctum');
+
+        $this->getJson('/api/tags?page=1&per_page=10')->assertOk()
+            ->assertJsonPath('data.tags.0.name', 'Tag 01');
+        $this->getJson('/api/tags?page=2&per_page=10')->assertOk()
+            ->assertJsonPath('data.pagination.current_page', 2)
+            ->assertJsonPath('data.tags.0.name', 'Tag 11');
+        $this->getJson('/api/tags?page=1&per_page=20')->assertOk()
+            ->assertJsonCount(20, 'data.tags')
+            ->assertJsonPath('data.pagination.per_page', 20);
+    }
+
+    public function test_tag_creation_invalidates_every_cached_search_and_page(): void
+    {
+        $this->actingAs(User::factory()->create(), 'sanctum');
+        Tag::factory()->create(['name' => 'Laravel']);
+        $this->getJson('/api/tags?search=Vue&per_page=1')->assertJsonCount(0, 'data.tags');
+        $this->getJson('/api/tags?page=2&per_page=1')->assertJsonCount(0, 'data.tags');
+
+        $this->postJson('/api/tags', ['name' => 'Vue'])->assertCreated();
+
+        $this->getJson('/api/tags?search=Vue&per_page=1')->assertOk()
+            ->assertJsonPath('data.tags.0.name', 'Vue');
+        $this->getJson('/api/tags?page=2&per_page=1')->assertOk()
+            ->assertJsonPath('data.tags.0.name', 'Vue');
+    }
+
     /**
      * Test can list tags.
      */

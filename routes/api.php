@@ -2,10 +2,10 @@
 
 use App\Http\Controllers\AdminProposalController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\BroadcastAuthenticationController;
 use App\Http\Controllers\ProposalController;
 use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\TagController;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 // Public routes - login/register need sessions for Sanctum SPA
@@ -25,9 +25,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
 
     // Broadcasting authentication
-    Route::post('/broadcasting/auth', function (Request $request) {
-        return \Illuminate\Support\Facades\Broadcast::auth($request);
-    });
+    Route::post('/broadcasting/auth', BroadcastAuthenticationController::class);
 
     // Tags
     Route::get('/tags', [TagController::class, 'index']);

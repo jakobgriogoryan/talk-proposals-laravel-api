@@ -10,7 +10,10 @@ use App\Services\FileUploadService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Mockery;
+use RuntimeException;
 use Tests\TestCase;
 
 /**
@@ -23,6 +26,23 @@ class FileUploadSecurityTest extends TestCase
     private User $user;
 
     private FileUploadService $fileUploadService;
+
+    public function test_storage_metadata_failure_does_not_bypass_quota_validation(): void
+    {
+        Queue::fake();
+        Proposal::factory()->create(['user_id' => $this->user->id, 'file_path' => 'proposals/existing.pdf']);
+        $disk = Mockery::mock();
+        $disk->shouldReceive('exists')->with('proposals/existing.pdf')->andReturnTrue();
+        $disk->shouldReceive('size')->with('proposals/existing.pdf')->andThrow(new RuntimeException('Storage unavailable'));
+        Storage::shouldReceive('disk')->with('public')->andReturn($disk);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Storage unavailable');
+        $this->fileUploadService->validateDomainRules(
+            UploadedFile::fake()->createWithContent('new.pdf', '%PDF-1.4 sample'),
+            $this->user->id
+        );
+    }
 
     protected function setUp(): void
     {

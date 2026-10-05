@@ -37,6 +37,12 @@ class SeedDummyDataCommand extends Command
      */
     public function handle(): int
     {
+        if (! app()->environment(['local', 'testing'])) {
+            $this->error('Dummy data can only be seeded in local or testing environments.');
+
+            return Command::FAILURE;
+        }
+
         $this->info('Seeding dummy data...');
 
         try {

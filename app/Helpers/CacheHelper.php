@@ -37,14 +37,14 @@ final class CacheHelper
     /**
      * Generate cache key for tags list.
      */
-    public static function tagsKey(?string $search = null): string
+    public static function tagsKey(?string $search = null, int $page = 1, int $perPage = PaginationConstants::DEFAULT_TAGS_PER_PAGE): string
     {
         $key = self::PREFIX_TAGS;
         if ($search !== null) {
             $key .= ':search:'.md5($search);
         }
 
-        return $key;
+        return $key.':page:'.$page.':per_page:'.$perPage.':version:'.Cache::get('tags:version', '0');
     }
 
     /**
@@ -74,10 +74,10 @@ final class CacheHelper
     /**
      * Get tags from cache or execute callback and cache result.
      */
-    public static function rememberTags(callable $callback, ?string $search = null): mixed
+    public static function rememberTags(callable $callback, ?string $search = null, int $page = 1, int $perPage = PaginationConstants::DEFAULT_TAGS_PER_PAGE): mixed
     {
         return Cache::remember(
-            self::tagsKey($search),
+            self::tagsKey($search, $page, $perPage),
             self::TTL_TAGS,
             $callback
         );
@@ -112,13 +112,10 @@ final class CacheHelper
      */
     public static function forgetTags(?string $search = null): void
     {
-        if ($search !== null) {
-            Cache::forget(self::tagsKey($search));
-        } else {
-            // Invalidate all tag-related caches
-            Cache::forget(self::tagsKey());
-            // Note: In production with Redis, you might want to use tags for pattern-based invalidation
-        }
+        Cache::forget(self::tagsKey($search));
+        // Rotate the namespace on every store, including drivers without cache tags.
+        // Unreachable pages expire naturally at TTL_TAGS; no wildcard scan is needed.
+        Cache::forever('tags:version', bin2hex(random_bytes(16)));
     }
 
     /**

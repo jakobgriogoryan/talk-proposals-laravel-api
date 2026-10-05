@@ -9,6 +9,8 @@ namespace App\Constants;
  */
 final class ValidationConstants
 {
+    public const MAX_SEARCH_LENGTH = 255;
+
     /**
      * Maximum length for title fields.
      */

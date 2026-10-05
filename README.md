@@ -122,6 +122,8 @@ silently cast into search filters. IDs need not exist: a valid unknown ID simply
 matches no proposals. Coverage: `ProposalFilterValidationTest`.
 
 - Attachment replacements validate PDF structure and the proposal owner's quota before changing the record. The old file is removed after commit; a rollback removes only the new upload.
+- Creation failures before commit roll back the proposal and remove its upload. After commit, event/cache/callback failures retain the proposal and PDF and return `201`, preventing a false creation failure from prompting duplicate retries. These processing failures are logged as `Post-commit proposal processing failed`; this does not guarantee event delivery during a queue outage or add an automatic delivery-recovery mechanism.
+- Tag cache identities include search, page, and page size. Tag creation and proposal tag changes rotate the cache namespace, invalidating every cached page and search variant without requiring Redis cache tags.
 - File-processing jobs ignore superseded attachments. Validation rejections clear the matching record and its cache; temporary processing failures retain the file for retry. Stored files are not counted twice against quota.
 - Editing review ratings queues a search-index refresh without sending a new-review notification. Proposal changes invalidate every supported top-rated limit (1–50).
 - Algolia filters use Scout's search options. Algolia failures fall back to database **title** search with the same speaker ownership, status, tags, and pagination constraints; unrelated exceptions are not masked by this fallback.
@@ -162,3 +164,40 @@ composer format:check
 `composer format` applies the repository's Laravel Pint rules. Keep validation
 tests explicit about successful HTTP statuses; a test that only excludes `422`
 can accidentally accept an authorization or server failure.
+
+## API contract and configuration checks
+
+OpenAPI uses the relative `/api` server by default, with no machine-specific host.
+`L5_SWAGGER_BASE_PATH` optionally overrides the server URL. The documentation
+processor derives enum values, the session cookie name and validation bounds from
+the application configuration/constants. PATCH updates and broadcasting auth are
+documented; multipart updates describe method override and explicit empty tags.
+An existing Sanctum bearer token is an alternative to SPA cookies; login/register
+do not create tokens. Swagger UI refreshes the CSRF cookie before mutations rather
+than embedding a token that becomes stale after login (using the supported
+[async request interceptor](https://swagger.io/docs/open-source-tools/swagger-ui/usage/configuration/)).
+
+```sh
+php artisan l5-swagger:generate
+php artisan test --filter=OpenApiContractTest
+composer test:swagger
+```
+
+The PHP contract tests generate an isolated document and compare it with actual
+routes, authentication settings and validation constants. The separate Node check
+executes the Swagger template's CSRF hook for safe requests and mutation failure
+cases. It requires Node, but `composer test` itself remains PHP-only.
+
+`FRONTEND_URL` defaults to `http://localhost:5173`. Optionally set comma-separated
+`CORS_ALLOWED_ORIGINS` for additional browser origins, including a custom local
+domain. The tracked config does not grant machine-specific domains by default;
+credentialed CORS should use explicit origins. Clear configuration after changes.
+
+Storage quota calculation propagates metadata/database failures instead of
+assuming partial usage is the full quota. Rating-only review edits preserve an
+existing comment; explicit `comment: null` clears it. A concurrent duplicate
+review insert returns the same `422` response as the pre-insert duplicate check.
+
+Demo account passwords are intentional test fixtures, not production credentials.
+`app:seed-dummy-data` now refuses any environment other than `local` or `testing`
+before starting a transaction or creating an account.

@@ -44,14 +44,14 @@ class ProposalController extends Controller
      */
     #[OA\Get(
         path: '/review/proposals',
-        description: 'Retrieves all proposals for reviewers to review. Only accessible by reviewer users. Supports full-text search (using Laravel Scout with Algolia or Elasticsearch) across title, description, tags, and author name. Also supports filtering by tags and status.',
-        summary: 'List all proposals for review (Reviewer only)',
+        description: 'Lists proposals for reviewers and admins. Database title search is the default and remote-outage fallback. Optional Algolia or Elasticsearch enables configured full-text search. Ownership, tags, status, and pagination constraints apply to every engine.',
+        summary: 'List all proposals for review (Reviewer or Admin)',
         security: [['sanctum' => []]],
         tags: ['Reviews'],
         parameters: [
             new OA\Parameter(
                 name: 'search',
-                description: 'Full-text search across proposal title, description, tags, and author name. Uses Laravel Scout with Algolia or Elasticsearch for advanced search capabilities when configured.',
+                description: 'Database title search by default and on remote outages. Configured Algolia or Elasticsearch provides full-text search across title, description, tags, and author name.',
                 in: 'query',
                 required: false,
                 schema: new OA\Schema(type: 'string', example: 'Laravel framework')
@@ -118,7 +118,7 @@ class ProposalController extends Controller
                 )
             ),
             new OA\Response(response: 401, description: 'Unauthenticated'),
-            new OA\Response(response: 403, description: 'Forbidden - Reviewer only'),
+            new OA\Response(response: 403, description: 'Forbidden - Reviewer or Admin required'),
             new OA\Response(response: 500, description: 'Server error'),
         ]
     )]
@@ -136,7 +136,7 @@ class ProposalController extends Controller
      */
     #[OA\Get(
         path: '/proposals',
-        description: 'Retrieves a paginated list of proposals. Speakers see only their own proposals, while reviewers and admins see all proposals. Supports full-text search (using Laravel Scout with Algolia or Elasticsearch) across title, description, tags, and author name. Also supports filtering by tags and status.',
+        description: 'Lists proposals with ownership, tags, status, and pagination constraints. Speakers see their own proposals; reviewers and admins see all. Database title search is the default and remote-outage fallback; configured Algolia or Elasticsearch enables full-text search.',
         summary: 'List proposals',
         security: [['sanctum' => []]],
         tags: ['Proposals'],
@@ -289,11 +289,15 @@ class ProposalController extends Controller
     )]
     public function store(StoreProposalRequest $request): JsonResponse
     {
+        $filePath = null;
+        $proposal = null;
+        $committed = false;
+        $transactionLevel = DB::transactionLevel();
+
         try {
             DB::beginTransaction();
 
             $validated = $request->validated();
-            $filePath = null;
 
             // File is already validated by StoreProposalRequest
             if ($request->hasFile('file')) {
@@ -328,10 +332,14 @@ class ProposalController extends Controller
             $proposal->load(['user', 'tags']);
 
             DB::commit();
+            $committed = true;
 
             // Invalidate caches related to proposals
             CacheHelper::forgetProposalRelated($proposal->id);
             CacheHelper::forgetUserRelated($request->user()->id);
+            if (! empty($validated['tags'])) {
+                CacheHelper::forgetTags();
+            }
 
             // Broadcast proposal submitted event (for real-time updates and background jobs)
             // Scout handles indexing; event listeners process files and notifications.
@@ -342,29 +350,36 @@ class ProposalController extends Controller
                 ['proposal' => new ProposalResource($proposal)],
                 201
             );
-        } catch (\InvalidArgumentException $e) {
-            DB::rollBack();
+        } catch (\Exception $e) {
+            // Commit callbacks may throw after the database write is durable.
+            $committed = $committed || ($proposal?->exists && DB::transactionLevel() === $transactionLevel);
+            if ($committed) {
+                $this->logError('Post-commit proposal processing failed', $e, $request);
 
-            // Clean up uploaded file if validation fails
-            if (isset($filePath)) {
+                return ApiResponse::success(
+                    'Proposal created successfully',
+                    ['proposal' => new ProposalResource($proposal)],
+                    201
+                );
+            }
+
+            if (DB::transactionLevel() > $transactionLevel) {
+                DB::rollBack($transactionLevel);
+            }
+
+            if ($filePath) {
                 try {
-                    $fileUploadService = app(FileUploadService::class);
-                    $fileUploadService->deleteFile($filePath);
+                    app(FileUploadService::class)->deleteFile($filePath);
                 } catch (\Exception $cleanupException) {
-                    Log::warning('Failed to cleanup file after validation error', [
+                    Log::warning('Failed to cleanup file after proposal creation error', [
                         'file_path' => $filePath,
                         'error' => $cleanupException->getMessage(),
                     ]);
                 }
             }
 
-            return ApiResponse::error($e->getMessage(), 422);
-        } catch (\Exception $e) {
-            DB::rollBack();
-
-            // Clean up uploaded file if transaction fails
-            if (isset($filePath)) {
-                Storage::disk(FileConstants::PROPOSAL_STORAGE_DISK)->delete($filePath);
+            if ($e instanceof \InvalidArgumentException) {
+                return ApiResponse::error($e->getMessage(), 422);
             }
 
             $this->logError('Error creating proposal', $e, $request);
@@ -593,20 +608,7 @@ class ProposalController extends Controller
         description: 'Updates an existing proposal. Speakers can only update their own proposals. All fields are optional - only provided fields will be updated.',
         summary: 'Update a proposal',
         security: [['sanctum' => []]],
-        requestBody: new OA\RequestBody(
-            required: false,
-            content: new OA\MediaType(
-                mediaType: 'multipart/form-data',
-                schema: new OA\Schema(
-                    properties: [
-                        new OA\Property(property: 'title', type: 'string', example: 'Updated Title', description: 'Proposal title (optional)'),
-                        new OA\Property(property: 'description', type: 'string', example: 'Updated description', description: 'Proposal description (optional)'),
-                        new OA\Property(property: 'file', type: 'string', format: 'binary', description: 'PDF file (optional, max 4MB)'),
-                        new OA\Property(property: 'tags', type: 'array', items: new OA\Items(type: 'string'), example: ['Technology', 'Laravel'], description: 'Array of tag names (optional, empty array removes all tags)'),
-                    ]
-                )
-            )
-        ),
+        requestBody: new OA\RequestBody(ref: '#/components/requestBodies/ProposalUpdate'),
         tags: ['Proposals'],
         parameters: [
             new OA\Parameter(
@@ -637,6 +639,23 @@ class ProposalController extends Controller
             ),
             new OA\Response(response: 401, description: 'Unauthenticated'),
             new OA\Response(response: 403, description: 'Unauthorized'),
+            new OA\Response(response: 404, description: 'Proposal not found'),
+            new OA\Response(response: 422, description: 'Validation error'),
+            new OA\Response(response: 500, description: 'Server error'),
+        ]
+    )]
+    #[OA\Patch(
+        path: '/proposals/{id}',
+        summary: 'Partially update a proposal',
+        description: 'Same validation and ownership rules as PUT. Browser multipart uploads use POST with _method=PATCH; tags=[] clears tags and omitted fields remain unchanged.',
+        security: [['sanctum' => []]],
+        tags: ['Proposals'],
+        parameters: [new OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer'))],
+        requestBody: new OA\RequestBody(ref: '#/components/requestBodies/ProposalUpdate'),
+        responses: [
+            new OA\Response(response: 200, description: 'Proposal updated successfully', content: new OA\JsonContent(ref: '#/components/schemas/ApiResponse')),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 403, description: 'Not authorized to update this proposal'),
             new OA\Response(response: 404, description: 'Proposal not found'),
             new OA\Response(response: 422, description: 'Validation error'),
             new OA\Response(response: 500, description: 'Server error'),

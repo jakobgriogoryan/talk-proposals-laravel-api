@@ -145,29 +145,23 @@ final class FileUploadService
     private function getUserStorageUsage(int $userId, ?string $excludedPath = null): int
     {
         $disk = Storage::disk(FileConstants::PROPOSAL_STORAGE_DISK);
-        $path = FileConstants::PROPOSAL_STORAGE_PATH;
 
         // Get all files for this user's proposals
         // Note: This assumes file paths are stored in proposals table
         // For better performance, consider caching this value
         $totalSize = 0;
 
-        try {
-            $files = \App\Models\Proposal::where('user_id', $userId)
-                ->whereNotNull('file_path')
-                ->when($excludedPath !== null, fn ($query) => $query->where('file_path', '!=', $excludedPath))
-                ->pluck('file_path');
+        // Unknown usage is not zero usage. Propagate infrastructure failures so
+        // queued processing retries instead of accepting a partially counted quota.
+        $files = \App\Models\Proposal::where('user_id', $userId)
+            ->whereNotNull('file_path')
+            ->when($excludedPath !== null, fn ($query) => $query->where('file_path', '!=', $excludedPath))
+            ->pluck('file_path');
 
-            foreach ($files as $filePath) {
-                if ($disk->exists($filePath)) {
-                    $totalSize += $disk->size($filePath);
-                }
+        foreach ($files as $filePath) {
+            if ($disk->exists($filePath)) {
+                $totalSize += $disk->size($filePath);
             }
-        } catch (\Exception $e) {
-            Log::warning('Error calculating user storage usage', [
-                'user_id' => $userId,
-                'error' => $e->getMessage(),
-            ]);
         }
 
         return $totalSize;

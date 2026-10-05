@@ -41,6 +41,7 @@
     "scripts": {
         "format": "pint",
         "format:check": "pint --test",
+        "test:swagger": "node --test tests/Support/swaggerCsrf.test.mjs",
         "setup": [
             "composer install",
             "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",

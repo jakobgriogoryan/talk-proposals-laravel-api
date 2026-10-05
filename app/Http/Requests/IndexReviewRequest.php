@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests;
 
+use App\Constants\PaginationConstants;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -39,7 +40,7 @@ class IndexReviewRequest extends FormRequest
                 'nullable',
                 'integer',
                 'min:1',
-                'max:50', // Max 50 per page for reviews
+                'max:'.PaginationConstants::MAX_REVIEWS_PER_PAGE,
             ],
         ];
     }
@@ -56,7 +57,7 @@ class IndexReviewRequest extends FormRequest
             'page.min' => 'The page number must be at least 1.',
             'per_page.integer' => 'Items per page must be an integer.',
             'per_page.min' => 'Items per page must be at least 1.',
-            'per_page.max' => 'Items per page cannot exceed 50.',
+            'per_page.max' => 'Items per page cannot exceed '.PaginationConstants::MAX_REVIEWS_PER_PAGE.'.',
         ];
     }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Requests;
 
 use App\Constants\PaginationConstants;
+use App\Constants\ValidationConstants;
 use App\Enums\ProposalStatus;
 use App\Models\Proposal;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -36,7 +37,7 @@ class IndexProposalRequest extends FormRequest
                 'sometimes',
                 'nullable',
                 'string',
-                'max:255',
+                'max:'.ValidationConstants::MAX_SEARCH_LENGTH,
             ],
             'tags' => ['sometimes', 'nullable', 'array'],
             'tags.*' => ['required', 'integer', 'min:1'],
@@ -71,7 +72,7 @@ class IndexProposalRequest extends FormRequest
     {
         return [
             'search.string' => 'The search query must be a valid string.',
-            'search.max' => 'The search query cannot exceed 255 characters.',
+            'search.max' => 'The search query cannot exceed '.ValidationConstants::MAX_SEARCH_LENGTH.' characters.',
             'tags.array' => 'The tags must be an array or comma-separated string.',
             'status.in' => 'The status must be one of: '.implode(', ', ProposalStatus::values()).'.',
             'page.integer' => 'The page number must be an integer.',
