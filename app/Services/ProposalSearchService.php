@@ -90,6 +90,10 @@ class ProposalSearchService
         );
     }
 
+    /**
+     * @param  Builder<Proposal>  $query
+     * @return Builder<Proposal>
+     */
     private function constrain(Builder $query, User $user, array $filters): Builder
     {
         $query->with($user->isAdmin() ? ['user', 'tags', 'reviews'] : ['user', 'tags']);

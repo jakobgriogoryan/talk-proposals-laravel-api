@@ -27,12 +27,12 @@ use Laravel\Scout\Searchable;
  * @property ProposalStatus|string $status
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
- * @property-read User $user
+ * @property-read User|null $user
  * @property-read Collection<int, Tag> $tags
  * @property-read Collection<int, Review> $reviews
  * @property-read float|null $avg_rating
- * @property-read int|null $reviews_count
- * @property-read float|null $reviews_avg_rating
+ * @property int|null $reviews_count
+ * @property float|null $reviews_avg_rating
  *
  * @method static searchByTitle(string $string)
  * @method static byTags(array $array)
@@ -45,7 +45,7 @@ class Proposal extends Model
     /**
      * The attributes that are mass assignable.
      *
-     * @var array<int, string>
+     * @var list<string>
      */
     protected $fillable = [
         'user_id',
@@ -70,7 +70,7 @@ class Proposal extends Model
     /**
      * Get the user that owns the proposal.
      *
-     * @return BelongsTo<User, Proposal>
+     * @return BelongsTo<User, $this>
      */
     public function user(): BelongsTo
     {
@@ -80,7 +80,7 @@ class Proposal extends Model
     /**
      * Get the tags for the proposal.
      *
-     * @return BelongsToMany<Tag>
+     * @return BelongsToMany<Tag, $this>
      */
     public function tags(): BelongsToMany
     {
@@ -90,7 +90,7 @@ class Proposal extends Model
     /**
      * Get the reviews for the proposal.
      *
-     * @return HasMany<Review>
+     * @return HasMany<Review, $this>
      */
     public function reviews(): HasMany
     {

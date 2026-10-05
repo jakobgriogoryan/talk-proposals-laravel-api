@@ -1,0 +1,15 @@
+<?php
+
+namespace Laravel\Scout\Engines;
+
+/**
+ * Scout's __call forwards SDK methods to its protected Algolia client.
+ *
+ * @template TAlgoliaClient of \Algolia\AlgoliaSearch\Api\SearchClient
+ * @mixin \Algolia\AlgoliaSearch\Api\SearchClient
+ */
+class Algolia4Engine {}
+
+namespace Algolia\AlgoliaSearch\Api;
+
+class SearchClient {}

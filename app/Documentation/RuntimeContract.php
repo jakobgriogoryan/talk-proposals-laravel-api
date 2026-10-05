@@ -50,16 +50,16 @@ final class RuntimeContract
         foreach ($analysis->openapi->paths as $path) {
             foreach (['get', 'post', 'put', 'patch', 'delete'] as $method) {
                 $operation = $path->{$method};
-                if (! $operation instanceof OA\Operation) {
+                if (Generator::isDefault($operation)) {
                     continue;
                 }
-                if (is_array($operation->security) && in_array(['sanctum' => []], $operation->security, true)) {
+                if (! Generator::isDefault($operation->security) && in_array(['sanctum' => []], $operation->security, true)) {
                     $operation->security[] = ['bearerAuth' => []];
                     $this->addResponse($operation, 401, 'Unauthenticated');
                 }
                 $validatedQuery = false;
-                foreach (is_array($operation->parameters) ? $operation->parameters : [] as $parameter) {
-                    if ($parameter->in !== 'query' || ! $parameter->schema instanceof OA\Schema) {
+                foreach (Generator::isDefault($operation->parameters) ? [] : $operation->parameters as $parameter) {
+                    if ($parameter->in !== 'query' || Generator::isDefault($parameter->schema)) {
                         continue;
                     }
                     $schema = $parameter->schema;

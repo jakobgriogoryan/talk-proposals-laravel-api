@@ -201,3 +201,40 @@ review insert returns the same `422` response as the pre-insert duplicate check.
 Demo account passwords are intentional test fixtures, not production credentials.
 `app:seed-dummy-data` now refuses any environment other than `local` or `testing`
 before starting a transaction or creating an account.
+
+## Continuous integration and quality checks
+
+`.github/workflows/ci.yml` runs on pull requests, pushes to `main`, and manual
+dispatch. The `Backend quality` check uses PHP 8.2 (the minimum supported version),
+Node 22 for the Swagger hook tests, and locked Composer dependencies. It checks:
+
+```sh
+composer validate --strict
+composer format:check
+composer analyse
+composer test
+composer test:swagger
+composer audit --locked --no-dev --abandoned=report --no-interaction
+```
+
+Larastan/PHPStan runs at level 5 over application code, routes, configuration,
+factories and migrations. There is no suppression baseline. Two small vendor
+PHPDoc stubs describe Scout's forwarded Algolia SDK methods and the nullable
+console command in Laravel's seeder; they do not alter runtime code.
+
+CI creates its own environment and disposable application key, uses in-memory
+SQLite, and disables real search, mail and broadcasting. Never copy CI's
+environment into a running installation. Live Elasticsearch integration tests
+remain opt-in and are not claimed as covered by this workflow.
+
+Actions are pinned to verified release commits, credentials are not persisted,
+and the workflow has read-only repository permissions. Checks continue after an
+earlier check fails so reviewers see all diagnostics; failures still fail the job.
+After publishing the workflow, configure branch protection to require
+`Backend quality`. The workflow does not itself change branch protection or deploy.
+
+The production dependency audit blocks published security advisories. It reports
+the existing abandoned `doctrine/annotations` dependency without hiding it or
+treating abandonment alone as a vulnerability. Replacing its upstream usage is
+separate maintenance work. Automatic deployment requires an agreed target,
+credentials and rollback strategy and is intentionally not configured.

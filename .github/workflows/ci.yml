@@ -1,0 +1,72 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Backend quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      APP_ENV: testing
+      APP_DEBUG: 'false'
+      DB_CONNECTION: sqlite
+      DB_DATABASE: ':memory:'
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+      MAIL_MAILER: array
+      BROADCAST_CONNECTION: 'null'
+      SCOUT_DRIVER: collection
+      SCOUT_QUEUE: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Setup PHP
+        uses: shivammathur/setup-php@fcafdd6392932010c2bd5094439b8e33be2a8a09 # 2.37.0
+        with:
+          php-version: '8.2'
+          extensions: mbstring, fileinfo, dom, xml, curl, pdo_sqlite, sqlite3
+          tools: composer:v2
+          coverage: none
+      - name: Setup Node for Swagger hook tests
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+      - name: Prepare isolated environment
+        run: cp .env.example .env
+      - name: Validate dependency manifest
+        run: composer validate --strict
+      - name: Install locked dependencies
+        id: install
+        run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Generate disposable application key
+        run: php artisan key:generate --no-interaction
+      - name: Check formatting
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: composer format:check
+      - name: Static analysis
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: composer analyse
+      - name: Unit, feature and OpenAPI contract tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: composer test
+      - name: Swagger CSRF hook tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: composer test:swagger
+      - name: Audit production dependencies
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: composer audit --locked --no-dev --abandoned=report --no-interaction

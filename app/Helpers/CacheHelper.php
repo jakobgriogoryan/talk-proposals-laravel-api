@@ -32,8 +32,6 @@ final class CacheHelper
 
     private const TTL_USER = 300; // 5 minutes
 
-    private const TTL_PROPOSAL = 1800; // 30 minutes
-
     /**
      * Generate cache key for tags list.
      */
@@ -150,6 +148,8 @@ final class CacheHelper
 
     /**
      * Invalidate all proposal-related caches.
+     *
+     * @throws \Exception When the configured cache backend fails; database writes may already be committed.
      */
     public static function forgetProposalRelated(int $proposalId): void
     {

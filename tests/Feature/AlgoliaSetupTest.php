@@ -115,6 +115,14 @@ class AlgoliaSetupTest extends TestCase
         $this->artisan('scout:check-algolia')->expectsOutputToContain('verified (read-only)')->assertSuccessful();
     }
 
+    public function test_diagnostics_reject_an_incompatible_scout_engine(): void
+    {
+        $engine = Mockery::mock(Engine::class);
+        app(EngineManager::class)->extend('algolia', fn () => $engine);
+
+        $this->artisan('scout:check-algolia')->expectsOutputToContain('Scout Algolia v4 engine')->assertFailed();
+    }
+
     public function test_search_only_key_is_not_reported_as_ready_for_indexing(): void
     {
         $client = Mockery::mock(SearchClient::class);

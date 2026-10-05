@@ -14,6 +14,8 @@
 - Full tests: `composer test`
 - Optional live Elasticsearch tests: `php artisan test tests/Integration/ElasticsearchIntegrationTest.php` (requires the local search service; isolated test DB and disposable indices).
 - Format check: `vendor/bin/pint --test`
+- Static analysis: `composer analyse` (Larastan/PHPStan level 5; no suppression baseline).
+- Swagger browser-hook tests: `composer test:swagger` (Node 22).
 
 ## Architecture and Boundaries
 
@@ -34,5 +36,6 @@
 ## Verification
 
 - Add focused feature/unit coverage for observable authorization and event contracts.
-- Run focused tests, then `composer test`, `vendor/bin/pint --test`, and `git diff --check`.
+- Run focused tests, then `composer test`, `composer test:swagger`, `composer analyse`, `vendor/bin/pint --test`, and `git diff --check`.
+- `.github/workflows/ci.yml` checks PRs and main on PHP 8.2 with isolated SQLite; it does not deploy or contact live search/mail/broadcast services.
 - Inspect the repository diff and status before committing.

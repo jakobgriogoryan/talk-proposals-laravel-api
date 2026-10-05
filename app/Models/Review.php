@@ -31,7 +31,7 @@ class Review extends Model
     /**
      * The attributes that are mass assignable.
      *
-     * @var array<int, string>
+     * @var list<string>
      */
     protected $fillable = [
         'proposal_id',
@@ -55,7 +55,7 @@ class Review extends Model
     /**
      * Get the proposal that the review belongs to.
      *
-     * @return BelongsTo<Proposal, Review>
+     * @return BelongsTo<Proposal, $this>
      */
     public function proposal(): BelongsTo
     {
@@ -65,7 +65,7 @@ class Review extends Model
     /**
      * Get the reviewer (user) that made the review.
      *
-     * @return BelongsTo<User, Review>
+     * @return BelongsTo<User, $this>
      */
     public function reviewer(): BelongsTo
     {

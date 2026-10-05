@@ -736,7 +736,7 @@ class ProposalController extends Controller
             }
 
             // Dispatch background jobs
-            if ($fileChanged && isset($newFilePath)) {
+            if ($fileChanged) {
                 // Process file in background (domain-level validation)
                 ProcessProposalFileJob::dispatch($proposal, $newFilePath, $proposal->user_id);
             }

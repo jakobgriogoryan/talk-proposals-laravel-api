@@ -1,0 +1,9 @@
+<?php
+
+namespace Illuminate\Database;
+
+class Seeder
+{
+    /** @var \Illuminate\Console\Command|null Set only when invoked through a console command. */
+    protected $command;
+}

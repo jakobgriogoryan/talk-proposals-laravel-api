@@ -47,7 +47,7 @@ class ApiResponse
      */
     public static function validationError(Validator|array $errors, string $message = 'Validation failed'): JsonResponse
     {
-        if (is_object($errors) && method_exists($errors, 'errors')) {
+        if ($errors instanceof Validator) {
             $errors = $errors->errors();
         }
 

@@ -9,6 +9,7 @@ use App\Helpers\AlgoliaConfiguration;
 use App\Models\Proposal;
 use Illuminate\Console\Command;
 use Laravel\Scout\EngineManager;
+use Laravel\Scout\Engines\Algolia4Engine;
 
 class CheckAlgolia extends Command
 {
@@ -37,6 +38,11 @@ class CheckAlgolia extends Command
         try {
             // Scout forwards these client methods through its configured engine.
             $client = $manager->engine('algolia');
+            if (! $client instanceof Algolia4Engine) {
+                $this->error('Algolia diagnostics require the configured Scout Algolia v4 engine.');
+
+                return self::FAILURE;
+            }
             $key = $client->getApiKey(config('scout.algolia.secret'));
             $missing = array_diff(['search', 'addObject', 'deleteObject', 'settings', 'editSettings'], $key['acl'] ?? []);
             if ($missing) {
