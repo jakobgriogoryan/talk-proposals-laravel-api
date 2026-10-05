@@ -8,6 +8,8 @@ use App\Constants\FileConstants;
 use App\Constants\PaginationConstants;
 use App\Enums\ProposalStatus;
 use App\Events\ProposalSubmitted;
+use App\Events\ProposalUpdated;
+use App\Events\ProposalDeleted;
 use App\Exceptions\ProposalFileNotFoundException;
 use App\Helpers\ApiResponse;
 use App\Helpers\CacheHelper;
@@ -654,7 +656,8 @@ class ProposalController extends Controller
     public function update(UpdateProposalRequest $request, Proposal $proposal): JsonResponse
     {
         $newFilePath = null;
-        $committed = false;
+        $commitAttempted = false;
+        $proposalChanged = false;
         $transactionLevel = DB::transactionLevel();
         try {
             DB::beginTransaction();
@@ -695,6 +698,7 @@ class ProposalController extends Controller
 
             if (count($data) > 0) {
                 $proposal->update($data);
+                $proposalChanged = $proposal->wasChanged(['title', 'description', 'file_path']);
             }
 
             // Handle tags update - tags are optional
@@ -705,65 +709,57 @@ class ProposalController extends Controller
                         $tag = Tag::firstOrCreate(['name' => (string) $tagName]);
                         $tagIds[] = $tag->id;
                     }
-                    $proposal->tags()->sync($tagIds);
+                    $tagChanges = $proposal->tags()->sync($tagIds);
                 } else {
                     // If tags array is empty, remove all tags
-                    $proposal->tags()->sync([]);
+                    $tagChanges = $proposal->tags()->sync([]);
                 }
+                $proposalChanged = $proposalChanged || count($tagChanges['attached']) > 0 || count($tagChanges['detached']) > 0;
             }
 
             $proposal->load(['user', 'tags']);
 
+            $commitAttempted = true;
             DB::commit();
-            $committed = true;
-
-            // Invalidate caches related to proposals
-            CacheHelper::forgetProposalRelated($proposal->id);
-            CacheHelper::forgetUserRelated($proposal->user_id);
-            // Invalidate tags cache if tags were updated
-            if (isset($validated['tags'])) {
-                CacheHelper::forgetTags();
-            }
-
-            // Dispatch background jobs
-            if ($fileChanged) {
-                // Process file in background (domain-level validation)
-                ProcessProposalFileJob::dispatch($proposal, $newFilePath, $proposal->user_id);
-            }
-
-            // Scout handles model saves; tag-only edits do not fire a saved event.
-            if (count($data) === 0 && isset($validated['tags'])) {
-                IndexProposalJob::dispatch($proposal);
-            }
-
-            return ApiResponse::success(
-                'Proposal updated successfully',
-                ['proposal' => new ProposalResource($proposal)]
-            );
-        } catch (\Exception $e) {
-            // After-commit callbacks can fail after the database write is durable.
-            $committed = $committed || DB::transactionLevel() === $transactionLevel;
-            if (! $committed) {
-                DB::rollBack();
-            }
-
-            if (! $committed && $newFilePath) {
-                try {
-                    app(FileUploadService::class)->deleteFile($newFilePath);
-                } catch (\Exception $cleanupException) {
-                    Log::warning('Unable to clean up failed proposal replacement', ['file_path' => $newFilePath]);
+        } catch (\Throwable $e) {
+            if (! $commitAttempted || DB::transactionLevel() > $transactionLevel) {
+                if (DB::transactionLevel() > $transactionLevel) DB::rollBack($transactionLevel);
+                if ($newFilePath) {
+                    try {
+                        app(FileUploadService::class)->deleteFile($newFilePath);
+                    } catch (\Exception $cleanupException) {
+                        Log::warning('Unable to clean up failed proposal replacement', ['file_path' => $newFilePath]);
+                    }
                 }
-            }
-            if ($e instanceof \InvalidArgumentException) {
-                return ApiResponse::error($e->getMessage(), 422);
-            }
+                if ($e instanceof \InvalidArgumentException) return ApiResponse::error($e->getMessage(), 422);
+                $this->logError('Error updating proposal', $e, $request, ['proposal_id' => $proposal->id]);
 
-            $this->logError('Error updating proposal', $e, $request, [
-                'proposal_id' => $proposal->id,
-            ]);
-
-            return ApiResponse::error('Failed to update proposal', 500);
+                return ApiResponse::error('Failed to update proposal', 500);
+            }
+            $this->logError('Post-commit proposal update callback failed', $e, $request, ['proposal_id' => $proposal->id]);
         }
+
+        $this->runPostCommitAction(fn () => CacheHelper::forgetProposalRelated($proposal->id),
+            'Post-commit proposal update cache invalidation failed', $request);
+        $this->runPostCommitAction(fn () => CacheHelper::forgetUserRelated($proposal->user_id),
+            'Post-commit proposal owner cache invalidation failed', $request);
+        if (isset($validated['tags'])) {
+            $this->runPostCommitAction(fn () => CacheHelper::forgetTags(), 'Post-commit tags cache invalidation failed', $request);
+        }
+        if ($fileChanged) {
+            $this->runPostCommitAction(fn () => ProcessProposalFileJob::dispatch($proposal, $newFilePath, $proposal->user_id),
+                'Post-commit file processing dispatch failed', $request);
+        }
+        // Scout handles model saves; tag-only edits do not fire a saved event.
+        if (count($data) === 0 && isset($validated['tags'])) {
+            $this->runPostCommitAction(fn () => IndexProposalJob::dispatch($proposal), 'Post-commit proposal indexing failed', $request);
+        }
+        if ($proposalChanged) {
+            $this->runPostCommitAction(fn () => event(new ProposalUpdated($proposal)),
+                'Post-commit proposal update event dispatch failed', $request);
+        }
+
+        return ApiResponse::success('Proposal updated successfully', ['proposal' => new ProposalResource($proposal)]);
     }
 
     /**
@@ -803,35 +799,42 @@ class ProposalController extends Controller
     )]
     public function destroy(Request $request, Proposal $proposal): JsonResponse
     {
+        $transactionLevel = DB::transactionLevel();
+        $commitAttempted = false;
+        $filePath = null;
         try {
             $this->authorize('delete', $proposal);
 
             DB::beginTransaction();
 
-            // Delete file if exists
-            if ($proposal->file_path) {
-                Storage::disk(FileConstants::PROPOSAL_STORAGE_DISK)->delete($proposal->file_path);
-            }
-
+            $proposal = Proposal::query()->lockForUpdate()->findOrFail($proposal->id);
+            $filePath = $proposal->file_path;
+            $deletedEvent = new ProposalDeleted($proposal);
             $proposal->delete();
-
+            $commitAttempted = true;
             DB::commit();
-
-            // Invalidate caches related to proposals
-            CacheHelper::forgetProposalRelated($proposal->id);
-            CacheHelper::forgetUserRelated($proposal->user_id);
-
-            return ApiResponse::success('Proposal deleted successfully');
         } catch (AuthorizationException $e) {
             return ApiResponse::error('Unauthorized', 403);
-        } catch (\Exception $e) {
-            DB::rollBack();
+        } catch (\Throwable $e) {
+            if (! $commitAttempted || DB::transactionLevel() > $transactionLevel) {
+                if (DB::transactionLevel() > $transactionLevel) DB::rollBack($transactionLevel);
+                $this->logError('Error deleting proposal', $e, $request, ['proposal_id' => $proposal->id]);
 
-            $this->logError('Error deleting proposal', $e, $request, [
-                'proposal_id' => $proposal->id,
-            ]);
-
-            return ApiResponse::error('Failed to delete proposal', 500);
+                return ApiResponse::error('Failed to delete proposal', 500);
+            }
+            $this->logError('Post-commit proposal deletion callback failed', $e, $request, ['proposal_id' => $proposal->id]);
         }
+
+        $this->runPostCommitAction(fn () => CacheHelper::forgetProposalRelated($proposal->id),
+            'Post-commit proposal deletion cache invalidation failed', $request);
+        $this->runPostCommitAction(fn () => CacheHelper::forgetUserRelated($proposal->user_id),
+            'Post-commit proposal owner cache invalidation failed', $request);
+        $this->runPostCommitAction(fn () => event($deletedEvent), 'Post-commit proposal deletion event dispatch failed', $request);
+        if ($filePath) {
+            $this->runPostCommitAction(fn () => app(FileUploadService::class)->deleteFile($filePath),
+                'Post-commit deleted proposal file cleanup failed', $request);
+        }
+
+        return ApiResponse::success('Proposal deleted successfully');
     }
 }

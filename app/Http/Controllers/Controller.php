@@ -8,6 +8,7 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Foundation\Validation\ValidatesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller as BaseController;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -24,11 +25,13 @@ abstract class Controller extends BaseController
      */
     protected function runPostCommitAction(callable $action, string $message, Request $request, array $context = []): void
     {
-        try {
-            $action();
-        } catch (\Throwable $exception) {
-            $this->logError($message, $exception, $request, $context);
-        }
+        DB::afterCommit(function () use ($action, $message, $request, $context): void {
+            try {
+                $action();
+            } catch (\Throwable $exception) {
+                $this->logError($message, $exception, $request, $context);
+            }
+        });
     }
 
     /**

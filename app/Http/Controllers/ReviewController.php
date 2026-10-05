@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\Constants\PaginationConstants;
 use App\Enums\ReviewRating;
 use App\Events\ProposalReviewed;
+use App\Events\ReviewUpdated;
 use App\Exceptions\DuplicateReviewException;
 use App\Helpers\ApiResponse;
 use App\Helpers\CacheHelper;
@@ -427,6 +428,9 @@ class ReviewController extends Controller
     )]
     public function update(UpdateReviewRequest $request, Proposal $proposal, Review $review): JsonResponse
     {
+        $transactionLevel = DB::transactionLevel();
+        $commitAttempted = false;
+        $changed = false;
         try {
             // Check if review belongs to proposal
             if ($review->proposal_id !== $proposal->id) {
@@ -437,28 +441,31 @@ class ReviewController extends Controller
 
             $validated = $request->validated();
             $review->update($validated);
+            $changed = $review->wasChanged(['rating', 'comment']);
 
             $review->load('reviewer');
 
+            $commitAttempted = true;
             DB::commit();
+        } catch (\Throwable $e) {
+            if (! $commitAttempted || DB::transactionLevel() > $transactionLevel) {
+                if (DB::transactionLevel() > $transactionLevel) DB::rollBack($transactionLevel);
+                $this->logError('Error updating review', $e, $request, ['review_id' => $review->id, 'proposal_id' => $proposal->id]);
 
-            // Invalidate caches related to proposals (reviews affect top-rated)
-            CacheHelper::forgetProposalRelated($review->proposal_id);
-            IndexProposalJob::dispatch($proposal);
-
-            return ApiResponse::success(
-                'Review updated successfully',
-                ['review' => new ReviewResource($review)]
-            );
-        } catch (\Exception $e) {
-            DB::rollBack();
-
-            $this->logError('Error updating review', $e, $request, [
-                'review_id' => $review->id,
-                'proposal_id' => $proposal->id,
-            ]);
-
-            return ApiResponse::error('Failed to update review', 500);
+                return ApiResponse::error('Failed to update review', 500);
+            }
+            $this->logError('Post-commit review update callback failed', $e, $request, ['review_id' => $review->id]);
         }
+
+        $this->runPostCommitAction(fn () => CacheHelper::forgetProposalRelated($proposal->id),
+            'Post-commit review update cache invalidation failed', $request);
+        $this->runPostCommitAction(fn () => IndexProposalJob::dispatch($proposal),
+            'Post-commit review indexing failed', $request);
+        if ($changed) {
+            $this->runPostCommitAction(fn () => event(new ReviewUpdated($proposal, $review)),
+                'Post-commit review update event dispatch failed', $request);
+        }
+
+        return ApiResponse::success('Review updated successfully', ['review' => new ReviewResource($review)]);
     }
 }
