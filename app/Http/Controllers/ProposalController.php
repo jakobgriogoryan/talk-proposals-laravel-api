@@ -291,7 +291,7 @@ class ProposalController extends Controller
     {
         $filePath = null;
         $proposal = null;
-        $committed = false;
+        $commitAttempted = false;
         $transactionLevel = DB::transactionLevel();
 
         try {
@@ -331,61 +331,51 @@ class ProposalController extends Controller
 
             $proposal->load(['user', 'tags']);
 
+            $commitAttempted = true;
             DB::commit();
-            $committed = true;
-
-            // Invalidate caches related to proposals
-            CacheHelper::forgetProposalRelated($proposal->id);
-            CacheHelper::forgetUserRelated($request->user()->id);
-            if (! empty($validated['tags'])) {
-                CacheHelper::forgetTags();
-            }
-
-            // Broadcast proposal submitted event (for real-time updates and background jobs)
-            // Scout handles indexing; event listeners process files and notifications.
-            event(new ProposalSubmitted($proposal, $filePath, $request->user()->id));
-
-            return ApiResponse::success(
-                'Proposal created successfully',
-                ['proposal' => new ProposalResource($proposal)],
-                201
-            );
-        } catch (\Exception $e) {
-            // Commit callbacks may throw after the database write is durable.
-            $committed = $committed || ($proposal?->exists && DB::transactionLevel() === $transactionLevel);
-            if ($committed) {
-                $this->logError('Post-commit proposal processing failed', $e, $request);
-
-                return ApiResponse::success(
-                    'Proposal created successfully',
-                    ['proposal' => new ProposalResource($proposal)],
-                    201
-                );
-            }
-
-            if (DB::transactionLevel() > $transactionLevel) {
-                DB::rollBack($transactionLevel);
-            }
-
-            if ($filePath) {
-                try {
-                    app(FileUploadService::class)->deleteFile($filePath);
-                } catch (\Exception $cleanupException) {
-                    Log::warning('Failed to cleanup file after proposal creation error', [
-                        'file_path' => $filePath,
-                        'error' => $cleanupException->getMessage(),
-                    ]);
+        } catch (\Throwable $e) {
+            if (! $commitAttempted || DB::transactionLevel() > $transactionLevel) {
+                if (DB::transactionLevel() > $transactionLevel) {
+                    DB::rollBack($transactionLevel);
                 }
+                if ($filePath) {
+                    try {
+                        app(FileUploadService::class)->deleteFile($filePath);
+                    } catch (\Exception $cleanupException) {
+                        Log::warning('Failed to cleanup file after proposal creation error', [
+                            'file_path' => $filePath,
+                            'error' => $cleanupException->getMessage(),
+                        ]);
+                    }
+                }
+                if ($e instanceof \InvalidArgumentException) {
+                    return ApiResponse::error($e->getMessage(), 422);
+                }
+                $this->logError('Error creating proposal', $e, $request);
+
+                return ApiResponse::error('Failed to create proposal', 500);
             }
-
-            if ($e instanceof \InvalidArgumentException) {
-                return ApiResponse::error($e->getMessage(), 422);
-            }
-
-            $this->logError('Error creating proposal', $e, $request);
-
-            return ApiResponse::error('Failed to create proposal', 500);
+            $this->logError('Post-commit proposal callback failed', $e, $request);
         }
+
+        $this->runPostCommitAction(
+            fn () => CacheHelper::forgetProposalRelated($proposal->id),
+            'Post-commit proposal cache invalidation failed', $request
+        );
+        $this->runPostCommitAction(
+            fn () => CacheHelper::forgetUserRelated($request->user()->id),
+            'Post-commit user cache invalidation failed', $request
+        );
+        if (! empty($validated['tags'])) {
+            $this->runPostCommitAction(fn () => CacheHelper::forgetTags(), 'Post-commit tags cache invalidation failed', $request);
+        }
+        // Scout handles indexing; event listeners process files and notifications.
+        $this->runPostCommitAction(
+            fn () => event(new ProposalSubmitted($proposal, $filePath, $request->user()->id)),
+            'Post-commit proposal event dispatch failed', $request
+        );
+
+        return ApiResponse::success('Proposal created successfully', ['proposal' => new ProposalResource($proposal)], 201);
     }
 
     /**

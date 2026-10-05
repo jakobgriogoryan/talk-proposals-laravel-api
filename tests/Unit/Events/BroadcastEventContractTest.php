@@ -10,6 +10,7 @@ use App\Events\ProposalSubmitted;
 use App\Models\Proposal;
 use App\Models\Review;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class BroadcastEventContractTest extends TestCase
@@ -60,6 +61,41 @@ class BroadcastEventContractTest extends TestCase
         $this->assertSame($proposal->title, $payload['proposal']['title']);
         $this->assertArrayNotHasKey('description', $payload['proposal']);
         $this->assertArrayNotHasKey('file_path', $payload['proposal']);
+    }
+
+    public function test_event_identity_is_unique_and_survives_queue_serialization(): void
+    {
+        $proposal = Proposal::factory()->create();
+        $review = Review::factory()->create(['proposal_id' => $proposal->id]);
+        $events = [
+            new ProposalSubmitted($proposal), new ProposalReviewed($proposal, $review),
+            new ProposalStatusChanged($proposal, 'pending', 'approved'),
+            new ProposalStatusChanged($proposal, 'rejected', 'approved'),
+        ];
+
+        $ids = [];
+        foreach ($events as $event) {
+            $payload = $event->broadcastWith();
+            $this->assertTrue(Str::isUuid($payload['event_id']));
+            $restored = unserialize(serialize($event));
+            $this->assertSame($payload['event_id'], $restored->broadcastWith()['event_id']);
+            $this->assertSame($payload['event_id'], $event->broadcastWith()['event_id']);
+            $ids[] = $payload['event_id'];
+        }
+        $this->assertCount(4, array_unique($ids));
+    }
+
+    public function test_legacy_queued_events_without_identity_can_still_be_broadcast(): void
+    {
+        $proposal = Proposal::factory()->create();
+        $review = Review::factory()->create(['proposal_id' => $proposal->id]);
+        foreach ([new ProposalSubmitted($proposal), new ProposalReviewed($proposal, $review),
+            new ProposalStatusChanged($proposal, 'pending', 'approved')] as $event) {
+            // Simulate payloads serialized before eventId existed.
+            unset($event->eventId);
+            $restored = unserialize(serialize($event));
+            $this->assertSame('', $restored->broadcastWith()['event_id']);
+        }
     }
 
     /**

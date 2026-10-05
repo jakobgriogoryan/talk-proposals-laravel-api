@@ -10,10 +10,14 @@ use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Str;
 
 class ProposalStatusChanged implements ShouldBroadcast
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
+
+    // Older queued events may be restored without this newly added property.
+    public string $eventId = '';
 
     /**
      * Create a new event instance.
@@ -23,7 +27,7 @@ class ProposalStatusChanged implements ShouldBroadcast
         public string $oldStatus,
         public string $newStatus
     ) {
-        //
+        $this->eventId = (string) Str::uuid();
     }
 
     /**
@@ -56,6 +60,7 @@ class ProposalStatusChanged implements ShouldBroadcast
     public function broadcastWith(): array
     {
         return [
+            'event_id' => $this->eventId,
             'proposal_id' => $this->proposal->id,
             'new_status' => $this->newStatus,
             'old_status' => $this->oldStatus,

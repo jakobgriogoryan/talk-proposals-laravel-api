@@ -233,6 +233,8 @@ class ReviewController extends Controller
     public function store(StoreReviewRequest $request, Proposal $proposal): JsonResponse
     {
         $transactionLevel = DB::transactionLevel();
+        $commitAttempted = false;
+        $review = null;
         try {
             // Check if reviewer already reviewed this proposal
             $existingReview = Review::where('proposal_id', $proposal->id)
@@ -260,35 +262,34 @@ class ReviewController extends Controller
             $review->load('reviewer');
             $proposal->refresh()->load('user');
 
+            $commitAttempted = true;
             DB::commit();
+        } catch (\Throwable $e) {
+            if (! $commitAttempted || DB::transactionLevel() > $transactionLevel) {
+                if (DB::transactionLevel() > $transactionLevel) {
+                    DB::rollBack($transactionLevel);
+                }
+                if ($e instanceof DuplicateReviewException) {
+                    return ApiResponse::error($e->getMessage(), $e->getCode());
+                }
+                $this->logError('Error creating review', $e, $request, ['proposal_id' => $proposal->id]);
 
-            // Invalidate caches related to proposals (reviews affect top-rated)
-            CacheHelper::forgetProposalRelated($proposal->id);
-
-            // Broadcast proposal reviewed event (for real-time updates and background jobs)
-            // Event listeners will handle: notifications and indexing
-            event(new ProposalReviewed($proposal, $review));
-
-            return ApiResponse::success(
-                'Review created successfully',
-                ['review' => new ReviewResource($review)],
-                201
-            );
-        } catch (DuplicateReviewException $e) {
-            if (DB::transactionLevel() > $transactionLevel) {
-                DB::rollBack($transactionLevel);
+                return ApiResponse::error('Failed to create review', 500);
             }
-
-            return ApiResponse::error($e->getMessage(), $e->getCode());
-        } catch (\Exception $e) {
-            DB::rollBack();
-
-            $this->logError('Error creating review', $e, $request, [
-                'proposal_id' => $proposal->id,
-            ]);
-
-            return ApiResponse::error('Failed to create review', 500);
+            // An after-commit callback can throw after the write is already durable.
+            $this->logError('Post-commit review callback failed', $e, $request, ['proposal_id' => $proposal->id]);
         }
+
+        $this->runPostCommitAction(
+            fn () => CacheHelper::forgetProposalRelated($proposal->id),
+            'Post-commit review cache invalidation failed', $request, ['proposal_id' => $proposal->id]
+        );
+        $this->runPostCommitAction(
+            fn () => event(new ProposalReviewed($proposal, $review)),
+            'Post-commit review event dispatch failed', $request, ['proposal_id' => $proposal->id]
+        );
+
+        return ApiResponse::success('Review created successfully', ['review' => new ReviewResource($review)], 201);
     }
 
     /**

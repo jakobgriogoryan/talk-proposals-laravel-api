@@ -199,6 +199,8 @@ class AdminProposalController extends Controller
     )]
     public function updateStatus(UpdateProposalStatusRequest $request, Proposal $proposal): JsonResponse
     {
+        $transactionLevel = DB::transactionLevel();
+        $commitAttempted = false;
         try {
             DB::beginTransaction();
 
@@ -216,31 +218,35 @@ class AdminProposalController extends Controller
 
             $proposal->load(['user', 'tags']);
 
+            $commitAttempted = true;
             DB::commit();
+        } catch (\Throwable $e) {
+            if (! $commitAttempted || DB::transactionLevel() > $transactionLevel) {
+                if (DB::transactionLevel() > $transactionLevel) {
+                    DB::rollBack($transactionLevel);
+                }
+                $this->logError('Error updating proposal status', $e, $request, ['proposal_id' => $proposal->id]);
 
-            // Invalidate caches related to proposals
-            CacheHelper::forgetProposalRelated($proposal->id);
-            CacheHelper::forgetUserRelated($proposal->user_id);
-
-            // Broadcast proposal status changed event (for real-time updates and background jobs)
-            // Event listeners will handle: notifications and indexing
-            $newStatus = $status->value;
-            if ($oldStatus !== $newStatus) {
-                event(new ProposalStatusChanged($proposal, $oldStatus, $newStatus));
+                return ApiResponse::error('Failed to update proposal status', 500);
             }
-
-            return ApiResponse::success(
-                'Proposal status updated successfully',
-                ['proposal' => new ProposalResource($proposal)]
-            );
-        } catch (\Exception $e) {
-            DB::rollBack();
-
-            $this->logError('Error updating proposal status', $e, $request, [
-                'proposal_id' => $proposal->id,
-            ]);
-
-            return ApiResponse::error('Failed to update proposal status', 500);
+            $this->logError('Post-commit status callback failed', $e, $request, ['proposal_id' => $proposal->id]);
         }
+
+        $this->runPostCommitAction(
+            fn () => CacheHelper::forgetProposalRelated($proposal->id),
+            'Post-commit status cache invalidation failed', $request, ['proposal_id' => $proposal->id]
+        );
+        $this->runPostCommitAction(
+            fn () => CacheHelper::forgetUserRelated($proposal->user_id),
+            'Post-commit user cache invalidation failed', $request, ['proposal_id' => $proposal->id]
+        );
+        if ($oldStatus !== $status->value) {
+            $this->runPostCommitAction(
+                fn () => event(new ProposalStatusChanged($proposal, $oldStatus, $status->value)),
+                'Post-commit status event dispatch failed', $request, ['proposal_id' => $proposal->id]
+            );
+        }
+
+        return ApiResponse::success('Proposal status updated successfully', ['proposal' => new ProposalResource($proposal)]);
     }
 }

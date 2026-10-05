@@ -18,6 +18,20 @@ abstract class Controller extends BaseController
     use AuthorizesRequests, ValidatesRequests;
 
     /**
+     * Run an independent side effect after saving, without misreporting the write.
+     *
+     * @param  array<string, mixed>  $context
+     */
+    protected function runPostCommitAction(callable $action, string $message, Request $request, array $context = []): void
+    {
+        try {
+            $action();
+        } catch (\Throwable $exception) {
+            $this->logError($message, $exception, $request, $context);
+        }
+    }
+
+    /**
      * Log error with structured context.
      *
      * @param  string  $message  The error message
