@@ -19,6 +19,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Scout\EngineManager;
@@ -158,20 +159,36 @@ class WorkflowRegressionTest extends TestCase
         $this->assertSame(['proposals/original.pdf'], Storage::disk('public')->allFiles('proposals'));
     }
 
-    public function test_after_commit_failure_does_not_delete_committed_attachment(): void
+    public function test_after_commit_failure_preserves_success_and_committed_attachment(): void
     {
         $proposal = Proposal::factory()->create(['file_path' => 'proposals/original.pdf']);
         Storage::disk('public')->put($proposal->file_path, '%PDF-1.4 original');
-        Proposal::updating(function (): void {
-            DB::afterCommit(fn () => throw new RuntimeException('Simulated post-commit failure'));
+        Log::spy();
+        $callbackRan = false;
+        Proposal::updating(function () use (&$callbackRan): void {
+            DB::afterCommit(function () use (&$callbackRan): void {
+                $callbackRan = true;
+                throw new RuntimeException('Simulated post-commit failure');
+            });
         });
 
         $this->actingAs($proposal->user, 'sanctum')->putJson("/api/proposals/{$proposal->id}", [
             'file' => UploadedFile::fake()->createWithContent('replacement.pdf', '%PDF-1.4 replacement'),
-        ])->assertStatus(500);
+        ])->assertOk()->assertJsonPath('status', 'success')
+            ->assertJsonPath('data.proposal.id', $proposal->id)
+            ->assertJsonPath('data.proposal.file_path', "/proposals/{$proposal->id}/download");
 
+        $this->assertTrue($callbackRan);
+        $this->assertSame(1, Proposal::count());
         $this->assertNotSame('proposals/original.pdf', $proposal->fresh()->file_path);
         Storage::disk('public')->assertExists($proposal->fresh()->file_path);
+        Storage::disk('public')->assertMissing('proposals/original.pdf');
+        Queue::assertPushed(ProcessProposalFileJob::class);
+        Log::shouldHaveReceived('error')->once()->with(
+            'Post-commit proposal update callback failed',
+            Mockery::on(fn (array $context): bool => $context['proposal_id'] === $proposal->id
+                && $context['error'] === 'Simulated post-commit failure')
+        );
     }
 
     public function test_file_job_does_not_count_the_stored_attachment_twice_for_quota(): void

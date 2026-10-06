@@ -7,9 +7,9 @@ namespace App\Http\Controllers;
 use App\Constants\FileConstants;
 use App\Constants\PaginationConstants;
 use App\Enums\ProposalStatus;
+use App\Events\ProposalDeleted;
 use App\Events\ProposalSubmitted;
 use App\Events\ProposalUpdated;
-use App\Events\ProposalDeleted;
 use App\Exceptions\ProposalFileNotFoundException;
 use App\Helpers\ApiResponse;
 use App\Helpers\CacheHelper;
@@ -723,7 +723,9 @@ class ProposalController extends Controller
             DB::commit();
         } catch (\Throwable $e) {
             if (! $commitAttempted || DB::transactionLevel() > $transactionLevel) {
-                if (DB::transactionLevel() > $transactionLevel) DB::rollBack($transactionLevel);
+                if (DB::transactionLevel() > $transactionLevel) {
+                    DB::rollBack($transactionLevel);
+                }
                 if ($newFilePath) {
                     try {
                         app(FileUploadService::class)->deleteFile($newFilePath);
@@ -731,7 +733,9 @@ class ProposalController extends Controller
                         Log::warning('Unable to clean up failed proposal replacement', ['file_path' => $newFilePath]);
                     }
                 }
-                if ($e instanceof \InvalidArgumentException) return ApiResponse::error($e->getMessage(), 422);
+                if ($e instanceof \InvalidArgumentException) {
+                    return ApiResponse::error($e->getMessage(), 422);
+                }
                 $this->logError('Error updating proposal', $e, $request, ['proposal_id' => $proposal->id]);
 
                 return ApiResponse::error('Failed to update proposal', 500);
@@ -817,7 +821,9 @@ class ProposalController extends Controller
             return ApiResponse::error('Unauthorized', 403);
         } catch (\Throwable $e) {
             if (! $commitAttempted || DB::transactionLevel() > $transactionLevel) {
-                if (DB::transactionLevel() > $transactionLevel) DB::rollBack($transactionLevel);
+                if (DB::transactionLevel() > $transactionLevel) {
+                    DB::rollBack($transactionLevel);
+                }
                 $this->logError('Error deleting proposal', $e, $request, ['proposal_id' => $proposal->id]);
 
                 return ApiResponse::error('Failed to delete proposal', 500);

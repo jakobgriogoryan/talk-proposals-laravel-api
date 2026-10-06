@@ -37,18 +37,24 @@ class RealtimeCommitBoundaryTest extends TestCase
             new ProposalStatusChanged($proposal, 'pending', 'approved')];
         $observed = [];
         foreach ($events as $event) {
-            Event::listen($event::class, function () use (&$observed): void { $observed[] = DB::transactionLevel(); });
+            Event::listen($event::class, function () use (&$observed): void {
+                $observed[] = DB::transactionLevel();
+            });
         }
         DB::beginTransaction();
         DB::beginTransaction();
-        foreach ($events as $event) event($event);
+        foreach ($events as $event) {
+            event($event);
+        }
         DB::commit();
         $this->assertSame([], $observed);
         DB::rollBack();
         $this->assertSame([], $observed);
         DB::beginTransaction();
         DB::beginTransaction();
-        foreach ($events as $event) event($event);
+        foreach ($events as $event) {
+            event($event);
+        }
         DB::commit();
         $this->assertSame([], $observed);
         DB::commit();
@@ -58,9 +64,12 @@ class RealtimeCommitBoundaryTest extends TestCase
     public function test_review_edit_emits_an_update_not_a_new_review_notification(): void
     {
         $observed = [];
-        $review = Review::factory()->create();
+        // Guarantee a real edit; a randomly generated rating of 5 is a no-op.
+        $review = Review::factory()->create(['rating' => 1]);
         $admin = User::factory()->create(['role' => 'admin']);
-        Event::listen('App\\Events\\ReviewUpdated', function () use (&$observed): void { $observed[] = DB::transactionLevel(); });
+        Event::listen('App\\Events\\ReviewUpdated', function () use (&$observed): void {
+            $observed[] = DB::transactionLevel();
+        });
         Event::listen(ProposalReviewed::class, fn () => $this->fail('An edit is not a new review'));
         $this->actingAs($admin, 'sanctum')->putJson("/api/proposals/{$review->proposal_id}/reviews/{$review->id}", ['rating' => 5])->assertOk();
         $this->assertSame([0], $observed);
@@ -70,7 +79,9 @@ class RealtimeCommitBoundaryTest extends TestCase
     {
         $observed = [];
         $proposal = Proposal::factory()->create();
-        Event::listen('App\\Events\\ProposalUpdated', function () use (&$observed): void { $observed[] = DB::transactionLevel(); });
+        Event::listen('App\\Events\\ProposalUpdated', function () use (&$observed): void {
+            $observed[] = DB::transactionLevel();
+        });
         $this->actingAs($proposal->user, 'sanctum')->putJson("/api/proposals/{$proposal->id}", ['tags' => ['new-tag']])->assertOk();
         $this->putJson("/api/proposals/{$proposal->id}", ['tags' => ['new-tag']])->assertOk();
         $this->assertSame([0], $observed);

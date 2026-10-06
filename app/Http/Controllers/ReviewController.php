@@ -449,7 +449,9 @@ class ReviewController extends Controller
             DB::commit();
         } catch (\Throwable $e) {
             if (! $commitAttempted || DB::transactionLevel() > $transactionLevel) {
-                if (DB::transactionLevel() > $transactionLevel) DB::rollBack($transactionLevel);
+                if (DB::transactionLevel() > $transactionLevel) {
+                    DB::rollBack($transactionLevel);
+                }
                 $this->logError('Error updating review', $e, $request, ['review_id' => $review->id, 'proposal_id' => $proposal->id]);
 
                 return ApiResponse::error('Failed to update review', 500);
