@@ -27,7 +27,7 @@ class Tag extends Model
     /**
      * The attributes that are mass assignable.
      *
-     * @var array<int, string>
+     * @var list<string>
      */
     protected $fillable = [
         'name',
@@ -36,7 +36,7 @@ class Tag extends Model
     /**
      * Get the proposals that have this tag.
      *
-     * @return BelongsToMany<Proposal>
+     * @return BelongsToMany<Proposal, $this>
      */
     public function proposals(): BelongsToMany
     {

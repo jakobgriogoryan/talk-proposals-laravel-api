@@ -4,18 +4,21 @@ declare(strict_types=1);
 
 namespace App\Events;
 
-use App\Http\Resources\ProposalResource;
 use App\Models\Proposal;
-use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Events\ShouldDispatchAfterCommit;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Str;
 
-class ProposalStatusChanged implements ShouldBroadcast
+class ProposalStatusChanged implements ShouldBroadcast, ShouldDispatchAfterCommit
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
+
+    // Older queued events may be restored without this newly added property.
+    public string $eventId = '';
 
     /**
      * Create a new event instance.
@@ -25,7 +28,7 @@ class ProposalStatusChanged implements ShouldBroadcast
         public string $oldStatus,
         public string $newStatus
     ) {
-        //
+        $this->eventId = (string) Str::uuid();
     }
 
     /**
@@ -38,6 +41,7 @@ class ProposalStatusChanged implements ShouldBroadcast
         return [
             new PrivateChannel('proposals'), // Global channel for list updates
             new PrivateChannel('proposals.'.$this->proposal->id), // Specific proposal channel
+            new PrivateChannel('user.'.$this->proposal->user_id), // Notify the speaker
         ];
     }
 
@@ -46,7 +50,7 @@ class ProposalStatusChanged implements ShouldBroadcast
      */
     public function broadcastAs(): string
     {
-        return 'ProposalStatusChanged';
+        return 'proposal.status.changed';
     }
 
     /**
@@ -56,19 +60,16 @@ class ProposalStatusChanged implements ShouldBroadcast
      */
     public function broadcastWith(): array
     {
-        // Ensure relationships are loaded for the resource
-        if (!$this->proposal->relationLoaded('user')) {
-            $this->proposal->load('user');
-        }
-        if (!$this->proposal->relationLoaded('tags')) {
-            $this->proposal->load('tags');
-        }
-
         return [
+            'event_id' => $this->eventId,
             'proposal_id' => $this->proposal->id,
             'new_status' => $this->newStatus,
             'old_status' => $this->oldStatus,
-            'proposal' => new ProposalResource($this->proposal),
+            'proposal' => [
+                'id' => $this->proposal->id,
+                'title' => $this->proposal->title,
+                'status' => $this->newStatus,
+            ],
             'message' => "Proposal '{$this->proposal->title}' status changed from {$this->oldStatus} to {$this->newStatus}",
         ];
     }

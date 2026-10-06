@@ -32,7 +32,7 @@ class IndexProposalRequestTest extends TestCase
         $response = $this->actingAs($this->user, 'sanctum')
             ->getJson('/api/proposals?search=test&status=pending&per_page=20');
 
-        $this->assertNotEquals(422, $response->status());
+        $response->assertOk();
     }
 
     /**
@@ -79,8 +79,7 @@ class IndexProposalRequestTest extends TestCase
         $response2 = $this->actingAs($this->user, 'sanctum')
             ->getJson('/api/proposals?tags=1,2');
 
-        $this->assertNotEquals(422, $response1->status());
-        $this->assertNotEquals(422, $response2->status());
+        $response1->assertOk();
+        $response2->assertOk();
     }
 }
-

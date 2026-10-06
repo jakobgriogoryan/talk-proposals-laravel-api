@@ -32,7 +32,7 @@ class IndexAdminProposalRequestTest extends TestCase
         $response = $this->actingAs($this->admin, 'sanctum')
             ->getJson('/api/admin/proposals?search=test&status=pending&user_id=1&per_page=20');
 
-        $this->assertNotEquals(422, $response->status());
+        $response->assertOk();
     }
 
     /**
@@ -68,4 +68,3 @@ class IndexAdminProposalRequestTest extends TestCase
         $this->assertEquals(422, $response->status());
     }
 }
-

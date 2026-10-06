@@ -1,0 +1,57 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Events;
+
+use App\Models\Proposal;
+use Illuminate\Broadcasting\InteractsWithSockets;
+use Illuminate\Broadcasting\PrivateChannel;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Events\ShouldDispatchAfterCommit;
+use Illuminate\Foundation\Events\Dispatchable;
+use Illuminate\Support\Str;
+
+/** Invalidation event with scalar identity; queued delivery never reloads a deleted model. */
+class ProposalUpdated implements ShouldBroadcast, ShouldDispatchAfterCommit
+{
+    use Dispatchable, InteractsWithSockets;
+
+    public string $eventId;
+
+    public int $proposalId;
+
+    public int $ownerId;
+
+    public function __construct(Proposal $proposal)
+    {
+        $this->eventId = (string) Str::uuid();
+        $this->proposalId = $proposal->id;
+        $this->ownerId = $proposal->user_id;
+    }
+
+    /** @return array<int, PrivateChannel> */
+    public function broadcastOn(): array
+    {
+        return [
+            new PrivateChannel('proposals'),
+            new PrivateChannel('proposals.'.$this->proposalId),
+            new PrivateChannel('user.'.$this->ownerId),
+        ];
+    }
+
+    public function broadcastAs(): string
+    {
+        return 'proposal.updated';
+    }
+
+    /** @return array<string, mixed> */
+    public function broadcastWith(): array
+    {
+        return [
+            'event_id' => $this->eventId,
+            'proposal_id' => $this->proposalId,
+            'message' => 'Proposal updated',
+        ];
+    }
+}

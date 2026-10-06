@@ -11,9 +11,17 @@ This guide explains how to set up and use Laravel Scout with Algolia for advance
 
 ### 1. Get Algolia Credentials
 
+Local development defaults to `SCOUT_DRIVER=collection`: proposal list search
+uses database title queries and requires no Algolia account. Keep this setting
+until you have real credentials. Copied placeholder values are not credentials;
+the application uses local search instead of attempting invalid Algolia hosts.
+
 1. Sign up for a free Algolia account at https://www.algolia.com/
 2. Create a new application
-3. Get your **Application ID** and **Admin API Key** from the Algolia dashboard
+3. Get your **Application ID** and a server-side API key from the Algolia dashboard.
+   The setup/check commands require `search`, `addObject`, `deleteObject`,
+   `settings`, and `editSettings`, scoped to this application's index or prefix.
+   An Admin API Key also works but should remain server-only.
 
 ### 2. Configure Environment Variables
 
@@ -24,18 +32,40 @@ SCOUT_DRIVER=algolia
 ALGOLIA_APP_ID=your_application_id_here
 ALGOLIA_SECRET=your_admin_api_key_here
 SCOUT_PREFIX=talk_proposals_
-SCOUT_QUEUE=false
+SCOUT_QUEUE=true
+QUEUE_CONNECTION=database
 ```
 
 **Note:** 
-- `SCOUT_QUEUE=false` means proposals will be indexed synchronously. Set to `true` if you want async indexing (requires queue worker).
+- Keep `SCOUT_QUEUE=true` with an asynchronous queue connection when using Algolia.
+  Scout indexes only after database commits, so failed indexing cannot roll back proposal saving.
+  Rolled-back changes are never indexed. Do not use the `sync` queue connection with Algolia.
 - `SCOUT_PREFIX` is optional but recommended to avoid conflicts if you have multiple applications.
 
 ### 3. Clear Configuration Cache
 
 ```bash
 php artisan config:clear
+php artisan queue:restart
 ```
+
+### 4. Sync Settings and Verify Connectivity
+
+Settings in `config/scout.php` do not reach Algolia until they are synced.
+This is required for the ownership, status and tag filters, not just ranking:
+
+```bash
+php artisan scout:sync-index-settings
+php artisan scout:check-algolia
+```
+
+`scout:check-algolia` is read-only: it checks credentials, key permissions,
+the prefixed proposal index's filter settings and a zero-hit search request.
+It returns nonzero for missing/placeholder credentials, inactive Algolia,
+unsafe synchronous queuing, connection/authentication errors or missing filters.
+It never prints keys or raw requests. Retry the check after settings finish
+applying; a successful check verifies connection/configuration, not completed
+indexing jobs. Only import after this check succeeds.
 
 ## 🚀 Import Existing Proposals
 
@@ -47,8 +77,20 @@ php artisan scout:import-proposals
 
 This command will:
 - Load all proposals with their relationships (user, tags)
-- Index them in Algolia
-- Show progress as it imports
+- Queue their indexing in Algolia
+- Show queueing progress; return nonzero if any dispatch fails
+
+In a separate terminal, keep the worker running:
+
+```bash
+php artisan queue:work --tries=3 --backoff=5 --timeout=60
+```
+
+Queued is not the same as indexed. Inspect `php artisan queue:failed` and verify
+records in the Algolia dashboard after the worker completes. Retry historical
+failed indexing jobs only after correcting configuration and checking their IDs;
+do not blindly retry notification or file jobs. Switching from local search to
+Algolia requires a fresh import, since local changes are not an Algolia index.
 
 **Options:**
 - `--chunk=500` - Number of proposals to process per chunk (default: 500)
@@ -130,12 +172,20 @@ Proposals are automatically indexed when:
 - A new proposal is created
 - A proposal is updated
 - Tags are added/removed from a proposal
+- A proposal status changes or a proposal is deleted
+- Reviews change the proposal's rating
 
-**Note:** If you're using queues (`SCOUT_QUEUE=true`), make sure your queue worker is running:
+**Note:** Indexing is queued and eventually consistent. Keep a worker running with retries:
 
 ```bash
-php artisan queue:work
+php artisan queue:work --tries=3 --backoff=5 --timeout=60
 ```
+
+Scout handles model saves and deletes. Review ratings and tag-only edits use
+`IndexProposalJob`. There is no second submitted/status indexing listener.
+Algolia failures are retried and then recorded in `failed_jobs`; they do not
+delete committed proposals or attachments. Fix Algolia credentials/connectivity
+before retrying a failed indexing job with `php artisan queue:retry <job-id>`.
 
 ## 🛠️ Manual Indexing
 
@@ -202,4 +252,3 @@ After setup, verify everything works:
 2. Test search: `GET /api/proposals?search=test`
 3. Check Algolia dashboard for indexed records
 4. Verify search results are relevant and fast
-

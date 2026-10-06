@@ -9,12 +9,17 @@ use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Events\ShouldDispatchAfterCommit;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Str;
 
-class ProposalSubmitted implements ShouldBroadcast
+class ProposalSubmitted implements ShouldBroadcast, ShouldDispatchAfterCommit
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
+
+    // Older queued events may be restored without this newly added property.
+    public string $eventId = '';
 
     /**
      * Create a new event instance.
@@ -24,13 +29,13 @@ class ProposalSubmitted implements ShouldBroadcast
         public ?string $filePath = null,
         public ?int $userId = null
     ) {
-        //
+        $this->eventId = (string) Str::uuid();
     }
 
     /**
      * Get the channels the event should broadcast on.
      *
-     * @return array<int, \Illuminate\Broadcasting\Channel>
+     * @return array<int, Channel>
      */
     public function broadcastOn(): array
     {
@@ -56,11 +61,12 @@ class ProposalSubmitted implements ShouldBroadcast
     public function broadcastWith(): array
     {
         // Ensure user relationship is loaded
-        if (!$this->proposal->relationLoaded('user')) {
+        if (! $this->proposal->relationLoaded('user')) {
             $this->proposal->load('user');
         }
 
         return [
+            'event_id' => $this->eventId,
             'proposal' => [
                 'id' => $this->proposal->id,
                 'title' => $this->proposal->title,

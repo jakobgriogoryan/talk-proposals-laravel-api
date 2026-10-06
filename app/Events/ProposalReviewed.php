@@ -6,16 +6,20 @@ namespace App\Events;
 
 use App\Models\Proposal;
 use App\Models\Review;
-use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Events\ShouldDispatchAfterCommit;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Str;
 
-class ProposalReviewed implements ShouldBroadcast
+class ProposalReviewed implements ShouldBroadcast, ShouldDispatchAfterCommit
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
+
+    // Older queued events may be restored without this newly added property.
+    public string $eventId = '';
 
     /**
      * Create a new event instance.
@@ -24,7 +28,7 @@ class ProposalReviewed implements ShouldBroadcast
         public Proposal $proposal,
         public Review $review
     ) {
-        //
+        $this->eventId = (string) Str::uuid();
     }
 
     /**
@@ -36,7 +40,7 @@ class ProposalReviewed implements ShouldBroadcast
     {
         return [
             new PrivateChannel('proposals'),
-            new PrivateChannel('proposal.'.$this->proposal->id),
+            new PrivateChannel('proposals.'.$this->proposal->id),
             new PrivateChannel('user.'.$this->proposal->user_id), // Notify the speaker
         ];
     }
@@ -57,11 +61,12 @@ class ProposalReviewed implements ShouldBroadcast
     public function broadcastWith(): array
     {
         // Ensure relationships are loaded
-        if (!$this->review->relationLoaded('reviewer')) {
+        if (! $this->review->relationLoaded('reviewer')) {
             $this->review->load('reviewer');
         }
 
         return [
+            'event_id' => $this->eventId,
             'proposal' => [
                 'id' => $this->proposal->id,
                 'title' => $this->proposal->title,

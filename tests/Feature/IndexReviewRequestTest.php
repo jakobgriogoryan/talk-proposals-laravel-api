@@ -17,6 +17,7 @@ class IndexReviewRequestTest extends TestCase
     use RefreshDatabase;
 
     private User $user;
+
     private Proposal $proposal;
 
     protected function setUp(): void
@@ -35,7 +36,7 @@ class IndexReviewRequestTest extends TestCase
         $response = $this->actingAs($this->user, 'sanctum')
             ->getJson("/api/proposals/{$this->proposal->id}/reviews?per_page=20");
 
-        $this->assertNotEquals(422, $response->status());
+        $response->assertOk();
     }
 
     /**
@@ -71,4 +72,3 @@ class IndexReviewRequestTest extends TestCase
         $this->assertEquals(422, $response->status());
     }
 }
-

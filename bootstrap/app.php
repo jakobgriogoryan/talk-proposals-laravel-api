@@ -5,6 +5,8 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 
 return Application::configure(basePath: dirname(__DIR__))
+    // EventServiceProvider owns the explicit listener map, including legacy exclusions.
+    ->withEvents(discover: false)
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
         api: __DIR__.'/../routes/api.php',
@@ -16,20 +18,9 @@ return Application::configure(basePath: dirname(__DIR__))
         \App\Providers\RouteServiceProvider::class,
     ])
     ->withMiddleware(function (Middleware $middleware): void {
-        // Add StartSession middleware to API routes so sessions can be used
-        $middleware->api(prepend: [
-            \Illuminate\Session\Middleware\StartSession::class,
-        ]);
-
-        // statefulApi() applies EnsureFrontendRequestsAreStateful which enables sessions
-        // and handles CSRF for requests from stateful domains
+        // Apply Sanctum's stateful SPA middleware, including sessions and CSRF validation,
+        // only to requests from configured first-party frontend domains.
         $middleware->statefulApi();
-
-        // CSRF validation: Only apply to web routes, not API routes
-        // API routes are handled by Sanctum's EnsureFrontendRequestsAreStateful middleware
-        $middleware->validateCsrfTokens(except: [
-            'api/*',
-        ]);
 
         // Add request/response logging middleware (development only)
         $middleware->append(\App\Http\Middleware\LogRequestResponse::class);

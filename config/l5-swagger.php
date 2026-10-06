@@ -91,7 +91,7 @@ return [
             /*
              * Edit to set the api's base path
              */
-            'base' => env('L5_SWAGGER_BASE_PATH', env('APP_URL', 'http://api.talkproposals.test')),
+            'base' => env('L5_SWAGGER_BASE_PATH', '/api'),
 
             /*
              * Absolute path to directories that should be excluded from scanning
@@ -141,7 +141,7 @@ return [
              * @see \OpenApi\scan
              */
             'processors' => [
-                // new \App\SwaggerProcessors\SchemaQueryParameter(),
+                \App\Documentation\RuntimeContract::class,
             ],
 
             /**
@@ -252,7 +252,7 @@ return [
          * Constants which can be used in annotations
          */
         'constants' => [
-            'L5_SWAGGER_CONST_HOST' => env('L5_SWAGGER_CONST_HOST', 'http://my-default-host.com'),
+            'L5_SWAGGER_CONST_HOST' => env('L5_SWAGGER_CONST_HOST', '/api'),
         ],
     ],
 ];

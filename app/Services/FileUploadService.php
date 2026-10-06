@@ -9,7 +9,6 @@ use App\Exceptions\ProposalFileNotFoundException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 
 /**
  * Service for handling secure file uploads with validation.
@@ -23,21 +22,22 @@ final class FileUploadService
 
     /**
      * Store uploaded file after domain-level validation.
-     * 
+     *
      * Note: Request-level validation (size, MIME type, extension) is handled
      * by Form Request classes. This method only performs domain-level validation
      * (PDF structure, storage quota) and stores the file.
      *
-     * @param UploadedFile $file The uploaded file (already validated by Request class)
-     * @param int $userId The user ID for quota checking
+     * @param  UploadedFile  $file  The uploaded file (already validated by Request class)
+     * @param  int  $userId  The user ID for quota checking
      * @return string The stored file path
+     *
      * @throws \InvalidArgumentException If domain validation fails
      * @throws \RuntimeException If file storage fails
      */
-    public function storeAndValidateDomain(UploadedFile $file, int $userId): string
+    public function storeAndValidateDomain(UploadedFile $file, int $userId, ?string $replacedPath = null): string
     {
         // Perform domain-level validation only
-        $this->validateDomainRules($file, $userId);
+        $this->validateDomainRules($file, $userId, $replacedPath);
 
         $path = $file->store(FileConstants::PROPOSAL_STORAGE_PATH, FileConstants::PROPOSAL_STORAGE_DISK);
 
@@ -50,31 +50,33 @@ final class FileUploadService
 
     /**
      * Validate domain-level rules for uploaded file.
-     * 
+     *
      * This method only validates domain/business logic rules:
      * - PDF structure validation (security check)
      * - User storage quota (business rule)
-     * 
+     *
      * Request-level validation (size, MIME type, extension) is handled
      * by Form Request classes and should not be duplicated here.
      *
-     * @param UploadedFile $file The uploaded file (already validated by Request class)
-     * @param int $userId The user ID for quota checking
+     * @param  UploadedFile  $file  The uploaded file (already validated by Request class)
+     * @param  int  $userId  The user ID for quota checking
+     *
      * @throws \InvalidArgumentException If domain validation fails
      */
-    public function validateDomainRules(UploadedFile $file, int $userId): void
+    public function validateDomainRules(UploadedFile $file, int $userId, ?string $excludedPath = null): void
     {
         // 1. Validate PDF structure (check magic bytes) - Domain-level security check
         $this->validatePdfStructure($file);
 
         // 2. Check user storage quota - Domain-level business rule
-        $this->checkUserStorageQuota($userId, $file->getSize());
+        $this->checkUserStorageQuota($userId, $file->getSize(), $excludedPath);
     }
 
     /**
      * Validate PDF file structure by checking magic bytes.
      *
-     * @param UploadedFile $file The uploaded file
+     * @param  UploadedFile  $file  The uploaded file
+     *
      * @throws \InvalidArgumentException If file is not a valid PDF
      */
     private function validatePdfStructure(UploadedFile $file): void
@@ -96,14 +98,15 @@ final class FileUploadService
     /**
      * Check user storage quota.
      *
-     * @param int $userId The user ID
-     * @param int $newFileSize The size of the new file in bytes
+     * @param  int  $userId  The user ID
+     * @param  int  $newFileSize  The size of the new file in bytes
+     *
      * @throws \InvalidArgumentException If quota exceeded
      */
-    private function checkUserStorageQuota(int $userId, int $newFileSize): void
+    private function checkUserStorageQuota(int $userId, int $newFileSize, ?string $excludedPath = null): void
     {
         $maxQuota = $this->getUserMaxQuota($userId);
-        $currentUsage = $this->getUserStorageUsage($userId);
+        $currentUsage = $this->getUserStorageUsage($userId, $excludedPath);
 
         if (($currentUsage + $newFileSize) > $maxQuota) {
             $maxQuotaMB = round($maxQuota / 1024 / 1024, 2);
@@ -121,7 +124,7 @@ final class FileUploadService
     /**
      * Get maximum storage quota for user (in bytes).
      *
-     * @param int $userId The user ID
+     * @param  int  $userId  The user ID
      * @return int Maximum quota in bytes (default: 100MB)
      */
     private function getUserMaxQuota(int $userId): int
@@ -136,34 +139,29 @@ final class FileUploadService
     /**
      * Get current storage usage for user (in bytes).
      *
-     * @param int $userId The user ID
+     * @param  int  $userId  The user ID
      * @return int Current usage in bytes
      */
-    private function getUserStorageUsage(int $userId): int
+    private function getUserStorageUsage(int $userId, ?string $excludedPath = null): int
     {
         $disk = Storage::disk(FileConstants::PROPOSAL_STORAGE_DISK);
-        $path = FileConstants::PROPOSAL_STORAGE_PATH;
 
         // Get all files for this user's proposals
         // Note: This assumes file paths are stored in proposals table
         // For better performance, consider caching this value
         $totalSize = 0;
 
-        try {
-            $files = \App\Models\Proposal::where('user_id', $userId)
-                ->whereNotNull('file_path')
-                ->pluck('file_path');
+        // Unknown usage is not zero usage. Propagate infrastructure failures so
+        // queued processing retries instead of accepting a partially counted quota.
+        $files = \App\Models\Proposal::where('user_id', $userId)
+            ->whereNotNull('file_path')
+            ->when($excludedPath !== null, fn ($query) => $query->where('file_path', '!=', $excludedPath))
+            ->pluck('file_path');
 
-            foreach ($files as $filePath) {
-                if ($disk->exists($filePath)) {
-                    $totalSize += $disk->size($filePath);
-                }
+        foreach ($files as $filePath) {
+            if ($disk->exists($filePath)) {
+                $totalSize += $disk->size($filePath);
             }
-        } catch (\Exception $e) {
-            Log::warning('Error calculating user storage usage', [
-                'user_id' => $userId,
-                'error' => $e->getMessage(),
-            ]);
         }
 
         return $totalSize;
@@ -172,7 +170,7 @@ final class FileUploadService
     /**
      * Delete file from storage.
      *
-     * @param string $filePath The file path to delete
+     * @param  string  $filePath  The file path to delete
      * @return bool True if deleted, false otherwise
      */
     public function deleteFile(string $filePath): bool
@@ -195,8 +193,9 @@ final class FileUploadService
     /**
      * Get file size.
      *
-     * @param string $filePath The file path
+     * @param  string  $filePath  The file path
      * @return int File size in bytes
+     *
      * @throws ProposalFileNotFoundException If file doesn't exist
      */
     public function getFileSize(string $filePath): int
@@ -210,4 +209,3 @@ final class FileUploadService
         return $disk->size($filePath);
     }
 }
-

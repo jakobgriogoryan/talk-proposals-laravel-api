@@ -58,7 +58,7 @@ php artisan migrate
 ### 5. Start Queue Worker
 
 ```bash
-php artisan queue:work
+php artisan queue:work --tries=3 --backoff=5 --timeout=60
 ```
 
 Or use the dev script which includes queue worker:
@@ -126,7 +126,7 @@ Components automatically refresh when events are received:
 
 ## Testing
 
-1. Start the Laravel queue worker: `php artisan queue:work`
+1. Start the Laravel queue worker: `php artisan queue:work --tries=3 --backoff=5 --timeout=60`
 2. Open the application in multiple browser tabs/windows
 3. Submit a proposal in one tab
 4. Watch for real-time notifications in other tabs
@@ -137,7 +137,7 @@ Components automatically refresh when events are received:
 
 ### Events Not Broadcasting
 
-1. Check queue worker is running: `php artisan queue:work`
+1. Check queue worker is running: `php artisan queue:work --tries=3 --backoff=5 --timeout=60`
 2. Check `.env` has correct Pusher credentials
 3. Check browser console for WebSocket connection errors
 4. Verify `BROADCAST_CONNECTION=pusher` in `.env` (Laravel 12) or `BROADCAST_DRIVER=pusher` (Laravel 11)
@@ -182,4 +182,3 @@ php artisan websockets:serve
 ```
 
 Update frontend Echo config to use `wsHost` and `wsPort` for local development.
-

@@ -32,7 +32,7 @@ class IndexTagRequestTest extends TestCase
         $response = $this->actingAs($this->user, 'sanctum')
             ->getJson('/api/tags?search=test&per_page=50');
 
-        $this->assertNotEquals(422, $response->status());
+        $response->assertOk();
     }
 
     /**
@@ -69,4 +69,3 @@ class IndexTagRequestTest extends TestCase
         $this->assertEquals(422, $response->status());
     }
 }
-

@@ -19,12 +19,9 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => [
-        env('FRONTEND_URL', 'http://localhost:3000'),
-        'http://talkproposals.test',
-        'http://api.talkproposals.test',
-        'http://localhost:8000',
-    ],
+    'allowed_origins' => array_values(array_filter(array_map('trim', explode(',',
+        env('CORS_ALLOWED_ORIGINS', env('FRONTEND_URL', 'http://localhost:5173'))
+    )))),
 
     'allowed_origins_patterns' => [],
 

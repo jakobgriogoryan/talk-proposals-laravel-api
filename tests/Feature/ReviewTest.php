@@ -9,7 +9,9 @@ use App\Enums\UserRole;
 use App\Models\Proposal;
 use App\Models\Review;
 use App\Models\User;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 /**
@@ -18,6 +20,39 @@ use Tests\TestCase;
 class ReviewTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_rating_only_update_preserves_the_existing_comment(): void
+    {
+        Queue::fake();
+        $review = Review::factory()->create(['comment' => 'Keep this comment']);
+        $this->actingAs(User::factory()->create(['role' => 'admin']), 'sanctum')
+            ->putJson("/api/proposals/{$review->proposal_id}/reviews/{$review->id}", ['rating' => 10])
+            ->assertOk()->assertJsonPath('data.review.comment', 'Keep this comment');
+        $this->assertSame('Keep this comment', $review->fresh()->comment);
+    }
+
+    public function test_explicit_null_comment_clears_it(): void
+    {
+        Queue::fake();
+        $review = Review::factory()->create(['comment' => 'Remove this comment']);
+        $this->actingAs(User::factory()->create(['role' => 'admin']), 'sanctum')
+            ->putJson("/api/proposals/{$review->proposal_id}/reviews/{$review->id}", ['rating' => 5, 'comment' => null])
+            ->assertOk()->assertJsonPath('data.review.comment', null);
+        $this->assertNull($review->fresh()->comment);
+    }
+
+    public function test_duplicate_insert_race_returns_the_existing_duplicate_review_contract(): void
+    {
+        Queue::fake();
+        $proposal = Proposal::factory()->create();
+        Review::creating(fn () => throw new UniqueConstraintViolationException(
+            'sqlite', 'insert into reviews', [], new \PDOException('Unique constraint violated')
+        ));
+        $this->actingAs(User::factory()->create(['role' => 'reviewer']), 'sanctum')
+            ->postJson("/api/proposals/{$proposal->id}/reviews", ['rating' => 5])
+            ->assertUnprocessable()->assertJsonPath('message', 'You have already reviewed this proposal');
+        $this->assertSame(0, Review::count());
+    }
 
     /**
      * Test reviewer can create review.
@@ -123,7 +158,7 @@ class ReviewTest extends TestCase
      */
     public function test_can_list_reviews_for_proposal(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['role' => UserRole::REVIEWER->value]);
         $proposal = Proposal::factory()->create();
         Review::factory()->count(3)->create(['proposal_id' => $proposal->id]);
 

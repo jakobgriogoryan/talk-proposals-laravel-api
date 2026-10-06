@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\Proposal;
+use App\Models\User;
 use Illuminate\Support\Facades\Broadcast;
 
 /*
@@ -13,35 +15,14 @@ use Illuminate\Support\Facades\Broadcast;
 |
 */
 
-Broadcast::channel('proposals', function ($user) {
-    // All authenticated users can listen to proposals channel
-    return $user !== null;
+Broadcast::channel('proposals', function (User $user): bool {
+    return $user->isReviewer();
 });
 
-Broadcast::channel('proposal.{proposalId}', function ($user, $proposalId) {
-    // Users can listen to specific proposal if they can view it
-    $proposal = \App\Models\Proposal::find($proposalId);
-    if (!$proposal) {
-        return false;
-    }
-    
-    // Admin, reviewer, or the proposal owner can listen
-    return $user->isAdmin() || $user->isReviewer() || $proposal->user_id === $user->id;
+Broadcast::channel('proposals.{proposal}', function (User $user, Proposal $proposal): bool {
+    return $user->can('view', $proposal);
 });
 
-Broadcast::channel('proposals.{proposalId}', function ($user, $proposalId) {
-    // Users can listen to specific proposal if they can view it
-    $proposal = \App\Models\Proposal::find($proposalId);
-    if (!$proposal) {
-        return false;
-    }
-    
-    // Admin, reviewer, or the proposal owner can listen
-    return $user->isAdmin() || $user->isReviewer() || $proposal->user_id === $user->id;
-});
-
-Broadcast::channel('user.{userId}', function ($user, $userId) {
-    // Users can only listen to their own user channel
+Broadcast::channel('user.{userId}', function (User $user, int $userId): bool {
     return (int) $user->id === (int) $userId;
 });
-

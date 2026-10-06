@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\ProposalStatus;
+use App\Helpers\AlgoliaConfiguration;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -26,12 +27,13 @@ use Laravel\Scout\Searchable;
  * @property ProposalStatus|string $status
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
- * @property-read User $user
+ * @property-read User|null $user
  * @property-read Collection<int, Tag> $tags
  * @property-read Collection<int, Review> $reviews
  * @property-read float|null $avg_rating
- * @property-read int|null $reviews_count
- * @property-read float|null $reviews_avg_rating
+ * @property int|null $reviews_count
+ * @property float|null $reviews_avg_rating
+ *
  * @method static searchByTitle(string $string)
  * @method static byTags(array $array)
  * @method static byStatus(string $string)
@@ -43,7 +45,7 @@ class Proposal extends Model
     /**
      * The attributes that are mass assignable.
      *
-     * @var array<int, string>
+     * @var list<string>
      */
     protected $fillable = [
         'user_id',
@@ -68,7 +70,7 @@ class Proposal extends Model
     /**
      * Get the user that owns the proposal.
      *
-     * @return BelongsTo<User, Proposal>
+     * @return BelongsTo<User, $this>
      */
     public function user(): BelongsTo
     {
@@ -78,7 +80,7 @@ class Proposal extends Model
     /**
      * Get the tags for the proposal.
      *
-     * @return BelongsToMany<Tag>
+     * @return BelongsToMany<Tag, $this>
      */
     public function tags(): BelongsToMany
     {
@@ -88,7 +90,7 @@ class Proposal extends Model
     /**
      * Get the reviews for the proposal.
      *
-     * @return HasMany<Review>
+     * @return HasMany<Review, $this>
      */
     public function reviews(): HasMany
     {
@@ -247,7 +249,7 @@ class Proposal extends Model
     public function toSearchableArray(): array
     {
         // Load relationships if not already loaded
-        $this->loadMissing(['user', 'tags']);
+        $this->loadMissing(['user', 'tags', 'reviews']);
 
         // Calculate average rating and reviews count
         $avgRating = $this->getAverageRating();
@@ -289,8 +291,6 @@ class Proposal extends Model
     /**
      * Determine if the model should be searchable.
      * Only sync to Scout if the driver is properly configured.
-     *
-     * @return bool
      */
     public function shouldBeSearchable(): bool
     {
@@ -303,14 +303,23 @@ class Proposal extends Model
 
         // If driver is 'algolia', check if credentials are configured
         if ($driver === 'algolia') {
-            $appId = config('scout.algolia.id', '');
-            $secret = config('scout.algolia.secret', '');
-
-            return !empty($appId) && !empty($secret);
+            return AlgoliaConfiguration::isConfigured();
         }
 
         // For other drivers (meilisearch, typesense), allow syncing
         // They will handle their own configuration errors
         return true;
+    }
+
+    // Eligibility is configuration-only, not a per-proposal visibility rule.
+    // Scout otherwise enqueues removal jobs even when indexing is disabled.
+    public function wasSearchableBeforeUpdate(): bool
+    {
+        return $this->shouldBeSearchable();
+    }
+
+    public function wasSearchableBeforeDelete(): bool
+    {
+        return $this->shouldBeSearchable();
     }
 }

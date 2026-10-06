@@ -1,12 +1,11 @@
 <?php
 
-use App\Helpers\ApiResponse;
 use App\Http\Controllers\AdminProposalController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\BroadcastAuthenticationController;
 use App\Http\Controllers\ProposalController;
 use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\TagController;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 // Public routes - login/register need sessions for Sanctum SPA
@@ -24,11 +23,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // Auth routes
     Route::get('/user', [AuthController::class, 'user']);
     Route::post('/logout', [AuthController::class, 'logout']);
-    
+
     // Broadcasting authentication
-    Route::post('/broadcasting/auth', function (Request $request) {
-        return \Illuminate\Support\Facades\Broadcast::auth($request);
-    });
+    Route::post('/broadcasting/auth', BroadcastAuthenticationController::class);
 
     // Tags
     Route::get('/tags', [TagController::class, 'index']);
@@ -51,8 +48,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/reviews/rating-options', [ReviewController::class, 'ratingOptions']);
     Route::get('/proposals/{proposal}/reviews', [ReviewController::class, 'index']);
     Route::post('/proposals/{proposal}/reviews', [ReviewController::class, 'store']);
-    Route::get('/proposals/{proposal}/reviews/{review}', [ReviewController::class, 'show']);
-    Route::put('/proposals/{proposal}/reviews/{review}', [ReviewController::class, 'update']);
+    Route::get('/proposals/{proposal}/reviews/{review}', [ReviewController::class, 'show'])->scopeBindings();
+    Route::put('/proposals/{proposal}/reviews/{review}', [ReviewController::class, 'update'])->scopeBindings();
 
     // Reviewer routes - reviewers can see all proposals for review
     Route::prefix('review')->group(function () {

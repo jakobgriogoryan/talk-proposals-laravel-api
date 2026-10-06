@@ -54,6 +54,7 @@ class SendProposalSubmittedNotificationJob implements ShouldQueue
                 Log::warning('No admin users found to notify about proposal submission', [
                     'proposal_id' => $this->proposal->id,
                 ]);
+
                 return;
             }
 
@@ -89,4 +90,3 @@ class SendProposalSubmittedNotificationJob implements ShouldQueue
         ]);
     }
 }
-

@@ -155,9 +155,18 @@
             validatorUrl: {!! isset($validatorUrl) ? '"' . $validatorUrl . '"' : 'null' !!},
             oauth2RedirectUrl: "{{ route('l5-swagger.'.$documentation.'.oauth2_callback', [], $useAbsolutePath) }}",
 
-            requestInterceptor: function(request) {
-                request.headers['X-CSRF-TOKEN'] = '{{ csrf_token() }}';
+            requestInterceptor: async function(request) {
                 request.credentials = 'include'; // Include cookies in requests
+                if (['POST', 'PUT', 'PATCH', 'DELETE'].includes((request.method || 'GET').toUpperCase())) {
+                    const response = await fetch('/sanctum/csrf-cookie', {
+                        credentials: 'include', headers: { Accept: 'application/json' }
+                    });
+                    if (!response.ok) throw new Error('Could not initialize CSRF protection');
+                    const token = document.cookie.split('; ').find(cookie => cookie.startsWith('XSRF-TOKEN='));
+                    if (!token) throw new Error('CSRF cookie unavailable. Check the session cookie configuration.');
+                    request.headers = request.headers || {};
+                    request.headers['X-XSRF-TOKEN'] = decodeURIComponent(token.slice('XSRF-TOKEN='.length));
+                }
                 return request;
             },
 

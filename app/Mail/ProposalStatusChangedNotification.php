@@ -67,4 +67,3 @@ class ProposalStatusChangedNotification extends Mailable
         return [];
     }
 }
-

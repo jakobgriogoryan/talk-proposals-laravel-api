@@ -20,7 +20,7 @@ class ReviewFactory extends Factory
     public function definition(): array
     {
         $validRatings = ReviewRating::values();
-        
+
         return [
             'proposal_id' => Proposal::factory(),
             'reviewer_id' => User::factory()->state(['role' => 'reviewer']),

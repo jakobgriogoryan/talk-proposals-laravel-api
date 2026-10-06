@@ -8,8 +8,6 @@ use App\Events\ProposalReviewed;
 use App\Events\ProposalStatusChanged;
 use App\Events\ProposalSubmitted;
 use App\Listeners\IndexProposalOnReviewedListener;
-use App\Listeners\IndexProposalOnStatusChangedListener;
-use App\Listeners\IndexProposalOnSubmittedListener;
 use App\Listeners\ProcessProposalFileListener;
 use App\Listeners\SendProposalReviewedNotificationListener;
 use App\Listeners\SendProposalStatusChangedNotificationListener;
@@ -30,11 +28,9 @@ class EventServiceProvider extends ServiceProvider
     protected $listen = [
         ProposalSubmitted::class => [
             ProcessProposalFileListener::class,
-            IndexProposalOnSubmittedListener::class,
             SendProposalSubmittedNotificationListener::class,
         ],
         ProposalStatusChanged::class => [
-            IndexProposalOnStatusChangedListener::class,
             SendProposalStatusChangedNotificationListener::class,
         ],
         ProposalReviewed::class => [
@@ -44,21 +40,6 @@ class EventServiceProvider extends ServiceProvider
     ];
 
     /**
-     * Register any events for your application.
-     */
-    public function boot(): void
-    {
-        // Clear any existing listeners for our events to prevent duplicates
-        $events = app('events');
-        $events->forget(ProposalSubmitted::class);
-        $events->forget(ProposalStatusChanged::class);
-        $events->forget(ProposalReviewed::class);
-
-        // Now register listeners normally
-        parent::boot();
-    }
-
-    /**
      * Determine if events and listeners should be automatically discovered.
      */
     public function shouldDiscoverEvents(): bool
@@ -66,4 +47,3 @@ class EventServiceProvider extends ServiceProvider
         return false;
     }
 }
-

@@ -14,6 +14,10 @@ final class PaginationConstants
      */
     public const DEFAULT_PER_PAGE = 15;
 
+    public const DEFAULT_TAGS_PER_PAGE = 50;
+
+    public const DEFAULT_REVIEWS_PER_PAGE = 10;
+
     /**
      * Minimum items per page.
      */
@@ -23,6 +27,8 @@ final class PaginationConstants
      * Maximum items per page.
      */
     public const MAX_PER_PAGE = 100;
+
+    public const MAX_REVIEWS_PER_PAGE = 50;
 
     /**
      * Default limit for top-rated proposals.

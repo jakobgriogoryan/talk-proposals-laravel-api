@@ -11,7 +11,7 @@ return [
     | using Laravel Scout. This connection is used when syncing all models
     | to the search service. You should adjust this based on your needs.
     |
-    | Supported: "algolia", "meilisearch", "typesense",
+    | Supported: "algolia", "elastic" (Elasticsearch 8), "meilisearch", "typesense",
     |            "database", "collection", "null"
     |
     */
@@ -42,7 +42,7 @@ return [
     |
     */
 
-    'queue' => env('SCOUT_QUEUE', false),
+    'queue' => env('SCOUT_QUEUE', true),
 
     /*
     |--------------------------------------------------------------------------
@@ -55,7 +55,7 @@ return [
     |
     */
 
-    'after_commit' => false,
+    'after_commit' => true,
 
     /*
     |--------------------------------------------------------------------------

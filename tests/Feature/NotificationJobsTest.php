@@ -107,4 +107,3 @@ class NotificationJobsTest extends TestCase
         Queue::assertPushed(IndexProposalJob::class);
     }
 }
-

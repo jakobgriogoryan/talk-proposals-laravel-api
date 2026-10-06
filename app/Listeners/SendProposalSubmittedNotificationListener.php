@@ -25,4 +25,3 @@ class SendProposalSubmittedNotificationListener implements ShouldQueue
         SendProposalSubmittedNotificationJob::dispatch($event->proposal);
     }
 }
-

@@ -32,7 +32,7 @@ class TopRatedProposalRequestTest extends TestCase
         $response = $this->actingAs($this->user, 'sanctum')
             ->getJson('/api/proposals/top-rated?limit=10');
 
-        $this->assertNotEquals(422, $response->status());
+        $response->assertOk();
     }
 
     /**
@@ -68,4 +68,3 @@ class TopRatedProposalRequestTest extends TestCase
         $this->assertEquals(422, $response->status());
     }
 }
-

@@ -28,4 +28,3 @@ class SendProposalReviewedNotificationListener implements ShouldQueue
         );
     }
 }
-

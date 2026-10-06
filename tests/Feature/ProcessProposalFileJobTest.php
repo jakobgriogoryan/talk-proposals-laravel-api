@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Helpers\CacheHelper;
 use App\Jobs\ProcessProposalFileJob;
 use App\Models\Proposal;
 use App\Models\User;
 use App\Services\FileUploadService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -27,11 +29,11 @@ class ProcessProposalFileJobTest extends TestCase
     public function test_job_processes_file_successfully(): void
     {
         Storage::fake('public');
-        
+
         $user = User::factory()->create();
         $proposal = Proposal::factory()->create([
             'user_id' => $user->id,
-            'file_path' => null,
+            'file_path' => 'proposals/test.pdf',
         ]);
 
         // Create a valid PDF file
@@ -53,20 +55,21 @@ class ProcessProposalFileJobTest extends TestCase
     public function test_job_fails_on_invalid_pdf_structure(): void
     {
         Storage::fake('public');
-        
+
         $user = User::factory()->create();
         $proposal = Proposal::factory()->create([
             'user_id' => $user->id,
-            'file_path' => null,
+            'file_path' => 'proposals/invalid.pdf',
         ]);
 
         // Create invalid file (not a PDF)
         $filePath = 'proposals/invalid.pdf';
         Storage::disk('public')->put($filePath, 'This is not a PDF');
+        Cache::put(CacheHelper::proposalKey($proposal->id), ['file_path' => $filePath]);
 
         // Execute job - should throw exception
         $job = new ProcessProposalFileJob($proposal, $filePath, $user->id);
-        
+
         try {
             $job->handle(app(FileUploadService::class));
             $this->fail('Expected InvalidArgumentException was not thrown');
@@ -76,11 +79,13 @@ class ProcessProposalFileJobTest extends TestCase
 
         // Verify file was cleaned up
         $this->assertFalse(Storage::disk('public')->exists($filePath));
+        $this->assertNull($proposal->fresh()->file_path);
+        $this->assertFalse(Cache::has(CacheHelper::proposalKey($proposal->id)));
     }
 
     /**
      * Test job is dispatched when proposal is created with file.
-     * 
+     *
      * Note: With event-driven architecture, the job is dispatched via
      * ProcessProposalFileListener when ProposalSubmitted event is fired.
      * Since QUEUE_CONNECTION=sync in tests, listeners execute synchronously.
@@ -116,4 +121,3 @@ class ProcessProposalFileJobTest extends TestCase
         ]);
     }
 }
-

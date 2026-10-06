@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Helpers;
 
+use App\Constants\PaginationConstants;
 use Illuminate\Support\Facades\Cache;
 
 /**
@@ -15,29 +16,33 @@ final class CacheHelper
      * Cache key prefixes.
      */
     private const PREFIX_TAGS = 'tags';
+
     private const PREFIX_TOP_RATED = 'top_rated_proposals';
+
     private const PREFIX_USER = 'user';
+
     private const PREFIX_PROPOSAL = 'proposal';
 
     /**
      * Cache TTL in seconds.
      */
     private const TTL_TAGS = 3600; // 1 hour
+
     private const TTL_TOP_RATED = 900; // 15 minutes
+
     private const TTL_USER = 300; // 5 minutes
-    private const TTL_PROPOSAL = 1800; // 30 minutes
 
     /**
      * Generate cache key for tags list.
      */
-    public static function tagsKey(?string $search = null): string
+    public static function tagsKey(?string $search = null, int $page = 1, int $perPage = PaginationConstants::DEFAULT_TAGS_PER_PAGE): string
     {
         $key = self::PREFIX_TAGS;
         if ($search !== null) {
             $key .= ':search:'.md5($search);
         }
 
-        return $key;
+        return $key.':page:'.$page.':per_page:'.$perPage.':version:'.Cache::get('tags:version', '0');
     }
 
     /**
@@ -67,10 +72,10 @@ final class CacheHelper
     /**
      * Get tags from cache or execute callback and cache result.
      */
-    public static function rememberTags(callable $callback, ?string $search = null): mixed
+    public static function rememberTags(callable $callback, ?string $search = null, int $page = 1, int $perPage = PaginationConstants::DEFAULT_TAGS_PER_PAGE): mixed
     {
         return Cache::remember(
-            self::tagsKey($search),
+            self::tagsKey($search, $page, $perPage),
             self::TTL_TAGS,
             $callback
         );
@@ -105,21 +110,24 @@ final class CacheHelper
      */
     public static function forgetTags(?string $search = null): void
     {
-        if ($search !== null) {
-            Cache::forget(self::tagsKey($search));
-        } else {
-            // Invalidate all tag-related caches
-            Cache::forget(self::tagsKey());
-            // Note: In production with Redis, you might want to use tags for pattern-based invalidation
-        }
+        Cache::forget(self::tagsKey($search));
+        // Rotate the namespace on every store, including drivers without cache tags.
+        // Unreachable pages expire naturally at TTL_TAGS; no wildcard scan is needed.
+        Cache::forever('tags:version', bin2hex(random_bytes(16)));
     }
 
     /**
      * Invalidate top-rated proposals cache.
      */
-    public static function forgetTopRated(int $limit = 10): void
+    public static function forgetTopRated(?int $limit = null): void
     {
-        Cache::forget(self::topRatedKey($limit));
+        if ($limit !== null) {
+            Cache::forget(self::topRatedKey($limit));
+
+            return;
+        }
+
+        Cache::deleteMultiple(array_map(self::topRatedKey(...), range(1, PaginationConstants::MAX_TOP_RATED_LIMIT)));
     }
 
     /**
@@ -140,13 +148,14 @@ final class CacheHelper
 
     /**
      * Invalidate all proposal-related caches.
+     *
+     * @throws \Exception When the configured cache backend fails; database writes may already be committed.
      */
     public static function forgetProposalRelated(int $proposalId): void
     {
         self::forgetProposal($proposalId);
         // Invalidate top-rated cache when a proposal changes
-        self::forgetTopRated(10);
-        // You might want to invalidate other limits if they exist
+        self::forgetTopRated();
     }
 
     /**
@@ -156,7 +165,6 @@ final class CacheHelper
     {
         self::forgetUser($userId);
         // Invalidate top-rated cache as user's proposals might affect rankings
-        self::forgetTopRated(10);
+        self::forgetTopRated();
     }
 }
-

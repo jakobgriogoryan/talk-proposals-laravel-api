@@ -273,7 +273,7 @@ After=network.target
 User=www-data
 Group=www-data
 Restart=always
-ExecStart=/usr/bin/php /var/www/talk-proposals/talk-proposals-api/artisan queue:work --sleep=3 --tries=3 --max-time=3600
+ExecStart=/usr/bin/php /var/www/talk-proposals/talk-proposals-api/artisan queue:work --sleep=3 --tries=3 --backoff=5 --timeout=60 --max-time=3600
 
 [Install]
 WantedBy=multi-user.target
@@ -586,4 +586,3 @@ https://api.yourdomain.com/up
 ---
 
 **Need Help?** Check the main [../README.md](../README.md) or review Laravel/Vue.js documentation.
-

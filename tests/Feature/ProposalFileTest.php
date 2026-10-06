@@ -19,31 +19,29 @@ class ProposalFileTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        Storage::fake('public');
+    }
+
     /**
      * Test speaker can download own proposal file.
-     * Note: This test requires actual file storage, not fake storage.
      */
     public function test_speaker_can_download_own_proposal_file(): void
     {
         $speaker = User::factory()->create(['role' => UserRole::SPEAKER->value]);
 
-        // Create actual file in storage
-        $filePath = 'proposals/test-proposal-'.time().'.pdf';
-        Storage::disk('public')->put($filePath, 'fake pdf content');
-
-        $proposal = Proposal::factory()->create([
+        $proposal = Proposal::factory()->withSampleAttachment()->create([
             'user_id' => $speaker->id,
-            'file_path' => $filePath,
         ]);
 
         // Use get() instead of getJson() for file downloads
         $response = $this->actingAs($speaker, 'sanctum')
             ->get("/api/proposals/{$proposal->id}/download");
 
-        $response->assertStatus(200);
-
-        // Cleanup
-        Storage::disk('public')->delete($filePath);
+        $response->assertOk()->assertDownload()->assertHeader('Content-Type', 'application/pdf');
+        $this->assertSame(file_get_contents(database_path('fixtures/test.pdf')), file_get_contents($response->baseResponse->getFile()->getPathname()));
     }
 
     /**
@@ -69,28 +67,18 @@ class ProposalFileTest extends TestCase
 
     /**
      * Test reviewer can download any proposal file.
-     * Note: This test requires actual file storage, not fake storage.
      */
     public function test_reviewer_can_download_any_proposal_file(): void
     {
         $reviewer = User::factory()->create(['role' => UserRole::REVIEWER->value]);
 
-        // Create actual file in storage
-        $filePath = 'proposals/test-proposal-'.time().'.pdf';
-        Storage::disk('public')->put($filePath, 'fake pdf content');
-
-        $proposal = Proposal::factory()->create([
-            'file_path' => $filePath,
-        ]);
+        $proposal = Proposal::factory()->withSampleAttachment()->create();
 
         // Use get() instead of getJson() for file downloads
         $response = $this->actingAs($reviewer, 'sanctum')
             ->get("/api/proposals/{$proposal->id}/download");
 
-        $response->assertStatus(200);
-
-        // Cleanup
-        Storage::disk('public')->delete($filePath);
+        $response->assertOk()->assertDownload()->assertHeader('Content-Type', 'application/pdf');
     }
 
     /**
@@ -105,5 +93,26 @@ class ProposalFileTest extends TestCase
             ->getJson("/api/proposals/{$proposal->id}/download");
 
         $response->assertStatus(404);
+    }
+
+    public function test_missing_storage_file_returns_404(): void
+    {
+        $reviewer = User::factory()->create(['role' => UserRole::REVIEWER->value]);
+        $proposal = Proposal::factory()->create(['file_path' => 'proposals/missing.pdf']);
+        $this->actingAs($reviewer, 'sanctum')->getJson("/api/proposals/{$proposal->id}/download")->assertNotFound();
+    }
+
+    public function test_download_requires_authentication(): void
+    {
+        $proposal = Proposal::factory()->withSampleAttachment()->create();
+        $this->getJson("/api/proposals/{$proposal->id}/download")->assertUnauthorized();
+    }
+
+    public function test_admin_can_download_sample_attachment(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::ADMIN->value]);
+        $proposal = Proposal::factory()->withSampleAttachment()->create();
+        $this->actingAs($admin, 'sanctum')->get("/api/proposals/{$proposal->id}/download")
+            ->assertOk()->assertDownload()->assertHeader('Content-Type', 'application/pdf');
     }
 }

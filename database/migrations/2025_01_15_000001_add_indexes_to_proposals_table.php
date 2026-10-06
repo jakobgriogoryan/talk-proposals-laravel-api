@@ -78,8 +78,8 @@ return new class extends Migration
             $tableName = $connection->getTablePrefix().$table;
 
             $result = $connection->select(
-                "SELECT COUNT(*) as count FROM information_schema.statistics 
-                 WHERE table_schema = ? AND table_name = ? AND index_name = ?",
+                'SELECT COUNT(*) as count FROM information_schema.statistics
+                 WHERE table_schema = ? AND table_name = ? AND index_name = ?',
                 [$database, $tableName, $index]
             );
 
@@ -90,4 +90,3 @@ return new class extends Migration
         }
     }
 };
-
